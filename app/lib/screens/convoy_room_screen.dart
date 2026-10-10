@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:livekit_client/livekit_client.dart';
@@ -8,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/rider_telemetry.dart';
 import '../services/api_service.dart';
 import '../services/intercom_service.dart';
+import '../utils/map_link_parser.dart';
 
 class ConvoyRoomScreen extends StatefulWidget {
   const ConvoyRoomScreen({super.key});
@@ -39,57 +41,185 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
     final titleController = TextEditingController(text: 'Genting Highlands BHP Petrol');
     final latController = TextEditingController(text: '3.4237');
     final lngController = TextEditingController(text: '101.7932');
+    final linkController = TextEditingController();
+    bool isParsing = false;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        title: const Text('Set Convoy Destination'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleController,
-              decoration: const InputDecoration(labelText: 'Destination Name / Waypoint'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: latController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Latitude'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: lngController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Longitude'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('CANCEL'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00A8CC)),
-            onPressed: () {
-              final lat = double.tryParse(latController.text.trim()) ?? 0.0;
-              final lng = double.tryParse(lngController.text.trim()) ?? 0.0;
-              if (titleController.text.isNotEmpty && lat != 0.0) {
-                final intercom = context.read<IntercomService>();
-                intercom.setDestination(TargetDestination(
-                  title: titleController.text.trim(),
-                  latitude: lat,
-                  longitude: lng,
-                  setBy: intercom.localRiderName,
-                ));
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          Future<void> handleParseLink(String text) async {
+            if (text.trim().isEmpty) return;
+            setDialogState(() => isParsing = true);
+            final result = await MapLinkParser.parse(text);
+            setDialogState(() => isParsing = false);
+
+            if (result != null) {
+              latController.text = result.latitude.toStringAsFixed(6);
+              lngController.text = result.longitude.toStringAsFixed(6);
+              if (result.label != null && result.label!.isNotEmpty) {
+                titleController.text = result.label!;
               }
-              Navigator.of(ctx).pop();
-            },
-            child: const Text('BROADCAST DESTINATION', style: TextStyle(color: Colors.white)),
-          ),
-        ],
+              if (ctx.mounted) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                    content: Text('Extracted coordinates: ${result.latitude.toStringAsFixed(4)}, ${result.longitude.toStringAsFixed(4)}'),
+                    backgroundColor: const Color(0xFF00A8CC),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+            } else {
+              if (ctx.mounted) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(
+                    content: Text('Could not extract coordinates from link. Please verify URL.'),
+                    backgroundColor: Colors.redAccent,
+                  ),
+                );
+              }
+            }
+          }
+
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1E293B),
+            title: const Text('Set Convoy Destination'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Paste Map Link Box
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF00A8CC).withValues(alpha: 0.5)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.link, size: 16, color: Color(0xFF00A8CC)),
+                            const SizedBox(width: 6),
+                            const Text(
+                              'Paste Map Link / Coordinates',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF00A8CC),
+                              ),
+                            ),
+                            const Spacer(),
+                            // Quick Paste button from Clipboard
+                            TextButton.icon(
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              icon: const Icon(Icons.content_paste, size: 13, color: Colors.amberAccent),
+                              label: const Text('PASTE', style: TextStyle(fontSize: 11, color: Colors.amberAccent)),
+                              onPressed: () async {
+                                final data = await Clipboard.getData(Clipboard.kTextPlain);
+                                if (data?.text != null && data!.text!.isNotEmpty) {
+                                  linkController.text = data.text!;
+                                  await handleParseLink(data.text!);
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: linkController,
+                                style: const TextStyle(fontSize: 12),
+                                decoration: InputDecoration(
+                                  hintText: 'Google Maps / Apple Maps / Waze link or 3.14,101.68',
+                                  hintStyle: const TextStyle(fontSize: 11, color: Colors.white38),
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            IconButton(
+                              icon: isParsing
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00A8CC)),
+                                    )
+                                  : const Icon(Icons.arrow_forward, color: Color(0xFF00A8CC), size: 20),
+                              tooltip: 'Parse Link',
+                              onPressed: isParsing ? null : () => handleParseLink(linkController.text),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(labelText: 'Destination Name / Waypoint'),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: latController,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(labelText: 'Latitude'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: lngController,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(labelText: 'Longitude'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('CANCEL'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00A8CC)),
+                onPressed: () {
+                  final lat = double.tryParse(latController.text.trim()) ?? 0.0;
+                  final lng = double.tryParse(lngController.text.trim()) ?? 0.0;
+                  if (titleController.text.isNotEmpty && lat != 0.0) {
+                    final intercom = context.read<IntercomService>();
+                    intercom.setDestination(TargetDestination(
+                      title: titleController.text.trim(),
+                      latitude: lat,
+                      longitude: lng,
+                      setBy: intercom.localRiderName,
+                    ));
+                  }
+                  Navigator.of(ctx).pop();
+                },
+                child: const Text('BROADCAST DESTINATION', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -347,6 +477,24 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
                         ],
                       ),
                     ),
+                    IconButton(
+                      icon: const Icon(Icons.copy, size: 18, color: Colors.white70),
+                      tooltip: 'Copy Destination Map Link',
+                      onPressed: () {
+                        final lat = intercom.destination!.latitude;
+                        final lng = intercom.destination!.longitude;
+                        final mapUrl = 'https://www.google.com/maps/search/?api=1&query=$lat,$lng';
+                        Clipboard.setData(ClipboardData(text: mapUrl));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Destination map link copied to clipboard!'),
+                            backgroundColor: Color(0xFF00A8CC),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 4),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF00A8CC),
