@@ -209,5 +209,36 @@ func main() {
 		})
 	})
 
+	// End Convoy Room (Host only)
+	router.POST("/api/rooms/end", func(c *gin.Context) {
+		var req struct {
+			PIN       string `json:"pin" binding:"required"`
+			CreatorID string `json:"creator_id" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		roomKey := fmt.Sprintf("nexronda:room:%s", req.PIN)
+		ctx := context.Background()
+		creator, err := srv.rdb.HGet(ctx, roomKey, "creator_id").Result()
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Room not found or already ended"})
+			return
+		}
+
+		if creator != req.CreatorID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Only the convoy host can end the ride for all"})
+			return
+		}
+
+		srv.rdb.Del(ctx, roomKey)
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "ended",
+			"message": "Convoy room has been ended successfully",
+		})
+	})
+
 	router.Run(":" + srv.cfg.Port)
 }

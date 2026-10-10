@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../services/api_service.dart';
 import '../services/intercom_service.dart';
@@ -28,6 +29,49 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
+  ConvoySession? _activeSession;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedRide();
+  }
+
+  Future<void> _loadSavedRide() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedPin = prefs.getString('active_convoy_pin');
+    final savedName = prefs.getString('active_convoy_name');
+    final isHost = prefs.getBool('active_convoy_is_host') ?? false;
+
+    if (savedPin != null && savedName != null) {
+      setState(() {
+        _activeSession = ConvoySession(
+          token: '',
+          roomName: savedName,
+          roomPin: savedPin,
+          liveKitUrl: '',
+          isCreator: isHost,
+        );
+      });
+    }
+  }
+
+  Future<void> _saveActiveRide(ConvoySession session) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('active_convoy_pin', session.roomPin);
+    await prefs.setString('active_convoy_name', session.roomName);
+    await prefs.setBool('active_convoy_is_host', session.isCreator);
+    setState(() => _activeSession = session);
+  }
+
+  Future<void> _clearActiveRide() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('active_convoy_pin');
+    await prefs.remove('active_convoy_name');
+    await prefs.remove('active_convoy_is_host');
+    setState(() => _activeSession = null);
+  }
+
   Future<void> _createConvoy() async {
     if (_riderNameController.text.trim().isEmpty || _roomNameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -44,6 +88,8 @@ class _HomeScreenState extends State<HomeScreen> {
         riderName: _riderNameController.text.trim(),
       );
 
+      await _saveActiveRide(session);
+
       if (!mounted) return;
       final intercom = context.read<IntercomService>();
       await intercom.connect(
@@ -53,9 +99,12 @@ class _HomeScreenState extends State<HomeScreen> {
       );
 
       if (!mounted) return;
-      Navigator.of(context).push(
+      final result = await Navigator.of(context).push<String>(
         MaterialPageRoute(builder: (_) => const ConvoyRoomScreen()),
       );
+      if (result == 'ended') {
+        await _clearActiveRide();
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -83,6 +132,8 @@ class _HomeScreenState extends State<HomeScreen> {
         riderName: _riderNameController.text.trim(),
       );
 
+      await _saveActiveRide(session);
+
       if (!mounted) return;
       final intercom = context.read<IntercomService>();
       await intercom.connect(
@@ -92,9 +143,12 @@ class _HomeScreenState extends State<HomeScreen> {
       );
 
       if (!mounted) return;
-      Navigator.of(context).push(
+      final result = await Navigator.of(context).push<String>(
         MaterialPageRoute(builder: (_) => const ConvoyRoomScreen()),
       );
+      if (result == 'ended') {
+        await _clearActiveRide();
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -166,7 +220,88 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: TextStyle(fontSize: 14, color: Colors.white54),
                 ),
               ),
-              const SizedBox(height: 36),
+              const SizedBox(height: 24),
+
+              // Active / Resume Convoy Card
+              if (_activeSession != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 24),
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFF00A8CC), width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF00A8CC).withValues(alpha: 0.15),
+                        blurRadius: 12,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.two_wheeler, color: Color(0xFF00A8CC)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _activeSession!.roomName,
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF00A8CC).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'PIN: ${_activeSession!.roomPin}',
+                              style: const TextStyle(
+                                color: Color(0xFF00A8CC),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF10B981),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              icon: const Icon(Icons.play_arrow),
+                              label: const Text('RESUME RIDE', style: TextStyle(fontWeight: FontWeight.bold)),
+                              onPressed: _isLoading ? null : () => _joinConvoy(pinToUse: _activeSession!.roomPin),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          IconButton.outlined(
+                            icon: const Icon(Icons.close, color: Colors.white60),
+                            tooltip: 'Dismiss',
+                            onPressed: () => _clearActiveRide(),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
 
               // Rider Name field
               TextField(

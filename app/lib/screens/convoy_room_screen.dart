@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import '../services/api_service.dart';
 import '../services/intercom_service.dart';
 
 class ConvoyRoomScreen extends StatefulWidget {
@@ -17,6 +18,12 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
   bool _showRadarMap = true;
 
   void _showQrDialog(BuildContext context, String pin) {
+    if (pin.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No Convoy PIN available to display')),
+      );
+      return;
+    }
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -26,32 +33,44 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
+              width: 220,
+              height: 220,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: QrImageView(
-                data: pin,
-                version: QrVersions.auto,
-                size: 200.0,
+              child: Center(
+                child: QrImageView(
+                  data: pin,
+                  version: QrVersions.auto,
+                  size: 190.0,
+                  eyeStyle: const QrEyeStyle(
+                    eyeShape: QrEyeShape.square,
+                    color: Color(0xFF0F172A),
+                  ),
+                  dataModuleStyle: const QrDataModuleStyle(
+                    dataModuleShape: QrDataModuleShape.square,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 16),
             Text(
               'PIN: $pin',
               style: const TextStyle(
-                fontSize: 24,
+                fontSize: 26,
                 fontWeight: FontWeight.bold,
-                letterSpacing: 3,
+                letterSpacing: 4,
                 color: Color(0xFF00A8CC),
               ),
             ),
             const SizedBox(height: 8),
             const Text(
-              'Ask nearby riders to scan this code to join convoy mesh voice instantly.',
+              'Riders can scan this code from their app to join your convoy room immediately.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white60, fontSize: 13),
+              style: TextStyle(color: Colors.white70, fontSize: 13),
             ),
           ],
         ),
@@ -139,10 +158,51 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.call_end, color: Colors.redAccent),
-            tooltip: 'Leave Convoy',
+            tooltip: 'Leave or End Convoy',
             onPressed: () async {
-              await intercom.disconnect();
-              if (context.mounted) Navigator.of(context).pop();
+              final isHost = session?.isCreator ?? false;
+              final action = await showDialog<String>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  backgroundColor: const Color(0xFF1E293B),
+                  title: Text(isHost ? 'Convoy Options' : 'Leave Convoy?'),
+                  content: Text(
+                    isHost
+                        ? 'Do you want to pause/leave the ride (PIN remains active so you can resume later), or permanently end the convoy for all riders?'
+                        : 'Are you sure you want to disconnect from this convoy ride?',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop('cancel'),
+                      child: const Text('CANCEL'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop('leave'),
+                      child: const Text('LEAVE (CAN RESUME)'),
+                    ),
+                    if (isHost)
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                        onPressed: () => Navigator.of(ctx).pop('end_all'),
+                        child: const Text('END CONVOY FOR ALL', style: TextStyle(color: Colors.white)),
+                      ),
+                  ],
+                ),
+              );
+
+              if (action == 'leave') {
+                await intercom.disconnect();
+                if (context.mounted) Navigator.of(context).pop();
+              } else if (action == 'end_all' && session != null) {
+                try {
+                  await ApiService.endRoom(
+                    pin: session.roomPin,
+                    creatorId: intercom.localRiderId,
+                  );
+                } catch (_) {}
+                await intercom.disconnect();
+                if (context.mounted) Navigator.of(context).pop('ended');
+              }
             },
           ),
         ],
