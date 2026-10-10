@@ -51,6 +51,16 @@ class IntercomService extends ChangeNotifier {
   final Map<String, RiderTelemetry> _telemetries = {};
   Map<String, RiderTelemetry> get telemetries => _telemetries;
 
+  // Targeted destination shared by host/rider
+  TargetDestination? _destination;
+  TargetDestination? get destination => _destination;
+
+  // Private 1-on-1 talk target (null = talk to everyone)
+  String? _privateTalkTargetId;
+  String? _privateTalkTargetName;
+  String? get privateTalkTargetId => _privateTalkTargetId;
+  String? get privateTalkTargetName => _privateTalkTargetName;
+
   bool _isSosActive = false;
   bool get isSosActive => _isSosActive;
 
@@ -65,6 +75,25 @@ class IntercomService extends ChangeNotifier {
   final Battery _battery = Battery();
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
+
+  void setDestination(TargetDestination dest) {
+    _destination = dest;
+    notifyListeners();
+    _broadcastTelemetry();
+  }
+
+  void clearDestination() {
+    _destination = null;
+    notifyListeners();
+    _broadcastTelemetry();
+  }
+
+  void setPrivateTalkTarget(String? targetId, String? targetName) {
+    _privateTalkTargetId = targetId;
+    _privateTalkTargetName = targetName;
+    notifyListeners();
+    _broadcastTelemetry();
+  }
 
   void setMicMode(MicMode mode) {
     _micMode = mode;
@@ -195,6 +224,9 @@ class IntercomService extends ChangeNotifier {
       final telemetry = RiderTelemetry.deserialize(raw);
       if (telemetry != null) {
         _telemetries[telemetry.riderId] = telemetry;
+        if (telemetry.destination != null) {
+          _destination = telemetry.destination;
+        }
         if (telemetry.isSos) {
           _sosRiderName = telemetry.riderName;
         } else if (_sosRiderName == telemetry.riderName) {
@@ -248,6 +280,8 @@ class IntercomService extends ChangeNotifier {
       batteryLevel: battery,
       isSos: _isSosActive,
       timestamp: DateTime.now().millisecondsSinceEpoch,
+      destination: _destination,
+      privateTargetRiderId: _privateTalkTargetId,
     );
 
     _telemetries[_localRiderId] = telemetry;

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:livekit_client/livekit_client.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../models/rider_telemetry.dart';
 import '../services/api_service.dart';
 import '../services/intercom_service.dart';
 
@@ -16,6 +19,80 @@ class ConvoyRoomScreen extends StatefulWidget {
 class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
   final MapController _mapController = MapController();
   bool _showRadarMap = true;
+
+  Future<void> _openNavigationApp(double lat, double lng, String label) async {
+    // Universal geo scheme opening Apple Maps on iOS or Google Maps / Waze
+    final appleMapsUrl = Uri.parse('https://maps.apple.com/?daddr=$lat,$lng&dirflg=d');
+    final googleMapsUrl = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$lat,$lng');
+    final wazeUrl = Uri.parse('https://waze.com/ul?ll=$lat,$lng&navigate=yes');
+
+    if (await canLaunchUrl(appleMapsUrl)) {
+      await launchUrl(appleMapsUrl, mode: LaunchMode.externalApplication);
+    } else if (await canLaunchUrl(googleMapsUrl)) {
+      await launchUrl(googleMapsUrl, mode: LaunchMode.externalApplication);
+    } else if (await canLaunchUrl(wazeUrl)) {
+      await launchUrl(wazeUrl, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  void _showSetDestinationDialog(BuildContext context) {
+    final titleController = TextEditingController(text: 'Genting Highlands BHP Petrol');
+    final latController = TextEditingController(text: '3.4237');
+    final lngController = TextEditingController(text: '101.7932');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text('Set Convoy Destination'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(labelText: 'Destination Name / Waypoint'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: latController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Latitude'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: lngController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Longitude'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('CANCEL'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00A8CC)),
+            onPressed: () {
+              final lat = double.tryParse(latController.text.trim()) ?? 0.0;
+              final lng = double.tryParse(lngController.text.trim()) ?? 0.0;
+              if (titleController.text.isNotEmpty && lat != 0.0) {
+                final intercom = context.read<IntercomService>();
+                intercom.setDestination(TargetDestination(
+                  title: titleController.text.trim(),
+                  latitude: lat,
+                  longitude: lng,
+                  setBy: intercom.localRiderName,
+                ));
+              }
+              Navigator.of(ctx).pop();
+            },
+            child: const Text('BROADCAST DESTINATION', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
 
   void _showQrDialog(BuildContext context, String pin) {
     if (pin.isEmpty) {
@@ -147,6 +224,11 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.add_location_alt, color: Color(0xFF00A8CC)),
+            tooltip: 'Set Target Destination',
+            onPressed: () => _showSetDestinationDialog(context),
+          ),
+          IconButton(
             icon: const Icon(Icons.qr_code_2),
             tooltip: 'Show Convoy QR',
             onPressed: () => _showQrDialog(context, pin),
@@ -234,6 +316,86 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
                 ),
               ),
 
+            // Target Destination Waypoint Banner (Tap to open Navigation App)
+            if (intercom.destination != null)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00A8CC).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF00A8CC)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.navigation, color: Color(0xFF00A8CC), size: 22),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            intercom.destination!.title,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            'Target Waypoint • Shared by ${intercom.destination!.setBy}',
+                            style: const TextStyle(fontSize: 10, color: Colors.white60),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00A8CC),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      icon: const Icon(Icons.directions, size: 16),
+                      label: const Text('NAVIGATE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      onPressed: () => _openNavigationApp(
+                        intercom.destination!.latitude,
+                        intercom.destination!.longitude,
+                        intercom.destination!.title,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Private 1-on-1 Whisper Mode Banner
+            if (intercom.privateTalkTargetName != null)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.purple.shade900.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.purpleAccent),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.record_voice_over, color: Colors.purpleAccent, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '1-on-1 Whisper Mode with ${intercom.privateTalkTargetName}',
+                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    TextButton(
+                      style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
+                      onPressed: () => intercom.setPrivateTalkTarget(null, null),
+                      child: const Text('RESET TO ALL', style: TextStyle(color: Colors.purpleAccent, fontSize: 11)),
+                    ),
+                  ],
+                ),
+              ),
+
             // Mode Selector (Open Mic VAD vs PTT)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
@@ -276,46 +438,85 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
                                 userAgentPackageName: 'com.nexkod.nexronda',
                               ),
                               MarkerLayer(
-                                markers: intercom.telemetries.values.map((t) {
-                                  final isSelf = t.riderId == intercom.localRiderId;
-                                  return Marker(
-                                    point: LatLng(t.latitude, t.longitude),
-                                    width: 80,
-                                    height: 80,
-                                    child: Column(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: Colors.black87,
-                                            borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(
-                                              color: t.isSos ? Colors.redAccent : const Color(0xFF00A8CC),
-                                            ),
-                                          ),
-                                          child: Text(
-                                            '${t.riderName} (${t.speedKmh.toInt()} km/h)',
-                                            style: TextStyle(
-                                              color: t.isSos ? Colors.redAccent : Colors.white,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
+                                markers: [
+                                  // Destination Waypoint Flag Marker
+                                  if (intercom.destination != null)
+                                    Marker(
+                                      point: LatLng(
+                                        intercom.destination!.latitude,
+                                        intercom.destination!.longitude,
+                                      ),
+                                      width: 100,
+                                      height: 90,
+                                      child: GestureDetector(
+                                        onTap: () => _openNavigationApp(
+                                          intercom.destination!.latitude,
+                                          intercom.destination!.longitude,
+                                          intercom.destination!.title,
                                         ),
-                                        const SizedBox(height: 2),
-                                        Icon(
-                                          Icons.two_wheeler,
-                                          size: 32,
-                                          color: t.isSos
-                                              ? Colors.redAccent
-                                              : isSelf
-                                                  ? Colors.greenAccent
-                                                  : const Color(0xFF00A8CC),
+                                        child: Column(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF00A8CC),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: Text(
+                                                intercom.destination!.title,
+                                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            const Icon(Icons.location_on, size: 36, color: Colors.amberAccent),
+                                          ],
                                         ),
-                                      ],
+                                      ),
                                     ),
-                                  );
-                                }).toList(),
+                                  // Rider Markers
+                                  ...intercom.telemetries.values.map((t) {
+                                    final isSelf = t.riderId == intercom.localRiderId;
+                                    return Marker(
+                                      point: LatLng(t.latitude, t.longitude),
+                                      width: 80,
+                                      height: 80,
+                                      child: Column(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black87,
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: t.isSos ? Colors.redAccent : const Color(0xFF00A8CC),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              '${t.riderName} (${t.speedKmh.toInt()} km/h)',
+                                              style: TextStyle(
+                                                color: t.isSos ? Colors.redAccent : Colors.white,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Icon(
+                                            Icons.two_wheeler,
+                                            size: 32,
+                                            color: t.isSos
+                                                ? Colors.redAccent
+                                                : isSelf
+                                                    ? Colors.greenAccent
+                                                    : const Color(0xFF00A8CC),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }),
+                                ],
                               ),
                             ],
                           ),
@@ -394,8 +595,54 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
                                   ],
                                 ),
                               ),
-                              if (isSpeaking)
-                                const Icon(Icons.volume_up, color: Colors.greenAccent),
+                              Row(
+                                children: [
+                                  // Open Rider's current location in Navigation App
+                                  if (t != null && participant is! LocalParticipant)
+                                    IconButton(
+                                      icon: const Icon(Icons.directions, color: Color(0xFF00A8CC), size: 20),
+                                      tooltip: 'Navigate to ${participant.name}',
+                                      onPressed: () => _openNavigationApp(
+                                        t.latitude,
+                                        t.longitude,
+                                        participant.name,
+                                      ),
+                                    ),
+
+                                  // Whisper / 1-on-1 Private Talk trigger
+                                  if (participant is! LocalParticipant)
+                                    IconButton(
+                                      icon: Icon(
+                                        intercom.privateTalkTargetId == participant.identity
+                                            ? Icons.record_voice_over
+                                            : Icons.hearing,
+                                        color: intercom.privateTalkTargetId == participant.identity
+                                            ? Colors.purpleAccent
+                                            : Colors.white54,
+                                        size: 22,
+                                      ),
+                                      tooltip: intercom.privateTalkTargetId == participant.identity
+                                          ? 'End 1-on-1 Whisper'
+                                          : 'Start 1-on-1 Private Talk',
+                                      onPressed: () {
+                                        if (intercom.privateTalkTargetId == participant.identity) {
+                                          intercom.setPrivateTalkTarget(null, null);
+                                        } else {
+                                          intercom.setPrivateTalkTarget(
+                                            participant.identity,
+                                            participant.name.isNotEmpty ? participant.name : participant.identity,
+                                          );
+                                        }
+                                      },
+                                    ),
+
+                                  if (isSpeaking)
+                                    const Padding(
+                                      padding: EdgeInsets.only(left: 4),
+                                      child: Icon(Icons.volume_up, color: Colors.greenAccent),
+                                    ),
+                                ],
+                              ),
                             ],
                           ),
                         );
