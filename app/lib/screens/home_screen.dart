@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../services/api_service.dart';
 import '../services/intercom_service.dart';
 import 'convoy_room_screen.dart';
+import 'qr_scanner_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -45,7 +46,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!mounted) return;
       final intercom = context.read<IntercomService>();
-      await intercom.connect(session);
+      await intercom.connect(
+        session: session,
+        riderId: _riderId,
+        riderName: _riderNameController.text.trim(),
+      );
 
       if (!mounted) return;
       Navigator.of(context).push(
@@ -61,8 +66,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _joinConvoy() async {
-    if (_riderNameController.text.trim().isEmpty || _pinController.text.trim().length != 6) {
+  Future<void> _joinConvoy({String? pinToUse}) async {
+    final pin = pinToUse ?? _pinController.text.trim();
+    if (_riderNameController.text.trim().isEmpty || pin.length != 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter your name and a valid 6-digit PIN')),
       );
@@ -72,14 +78,18 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isLoading = true);
     try {
       final session = await ApiService.joinRoom(
-        pin: _pinController.text.trim(),
+        pin: pin,
         riderId: _riderId,
         riderName: _riderNameController.text.trim(),
       );
 
       if (!mounted) return;
       final intercom = context.read<IntercomService>();
-      await intercom.connect(session);
+      await intercom.connect(
+        session: session,
+        riderId: _riderId,
+        riderName: _riderNameController.text.trim(),
+      );
 
       if (!mounted) return;
       Navigator.of(context).push(
@@ -92,6 +102,16 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _scanQr() async {
+    final scannedPin = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+    );
+    if (scannedPin != null && scannedPin.isNotEmpty) {
+      _pinController.text = scannedPin;
+      _joinConvoy(pinToUse: scannedPin);
     }
   }
 
@@ -250,17 +270,39 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF10B981),
-                        side: const BorderSide(color: Color(0xFF10B981)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF10B981),
+                              side: const BorderSide(color: Color(0xFF10B981)),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            onPressed: _isLoading ? null : () => _joinConvoy(),
+                            child: const Text('JOIN PIN', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
                         ),
-                      ),
-                      onPressed: _isLoading ? null : _joinConvoy,
-                      child: const Text('JOIN CONVOY', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF00A8CC),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            icon: const Icon(Icons.qr_code_scanner, size: 20),
+                            label: const Text('SCAN QR', style: TextStyle(fontWeight: FontWeight.bold)),
+                            onPressed: _isLoading ? null : _scanQr,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
