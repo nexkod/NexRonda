@@ -13,12 +13,14 @@ services:
     container_name: nexronda-server
     ports:
       - "8089:8080"
+    env_file:
+      - .env
     environment:
       - PORT=8080
       - REDIS_URL=redis:6379
-      - LIVEKIT_URL=${LIVEKIT_URL:-https://your-project.livekit.cloud}
-      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-devkey}
-      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-secretsecretsecretsecretsecretsecret32}
+      - LIVEKIT_URL=${LIVEKIT_URL:-wss://nexronda-5q2uyh7l.livekit.cloud}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-APIXkCXcNRxwuQT}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-t0342pMRnvEajhqfB9qbVpLkujZRpmU9v8NGP8seaoV}
     depends_on:
       - redis
     restart: unless-stopped
