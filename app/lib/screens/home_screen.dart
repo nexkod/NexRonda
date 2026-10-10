@@ -108,16 +108,24 @@ class _HomeScreenState extends State<HomeScreen> {
               // App Logo / Icon Header
               Center(
                 child: Container(
-                  width: 80,
-                  height: 80,
+                  width: 96,
+                  height: 96,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF10B981).withOpacity(0.15),
-                    shape: BoxShape.circle,
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF00A8CC).withValues(alpha: 0.3),
+                        blurRadius: 18,
+                        spreadRadius: 2,
+                      ),
+                    ],
                   ),
-                  child: const Icon(
-                    Icons.two_wheeler,
-                    color: Color(0xFF10B981),
-                    size: 42,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(22),
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
               ),
