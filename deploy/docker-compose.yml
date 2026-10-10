@@ -3,20 +3,8 @@ services:
     image: redis:7-alpine
     container_name: nexronda-redis
     restart: unless-stopped
-
-  livekit:
-    image: livekit/livekit-server:latest
-    container_name: nexronda-livekit
-    command: --config /etc/livekit.yaml
     volumes:
-      - ./livekit.yaml:/etc/livekit.yaml:ro
-    ports:
-      - "7880:7880"
-      - "7881:7881"
-      - "50000-50050:50000-50050/udp"
-    depends_on:
-      - redis
-    restart: unless-stopped
+      - redis_data:/data
 
   server:
     build:
@@ -28,10 +16,12 @@ services:
     environment:
       - PORT=8080
       - REDIS_URL=redis:6379
-      - LIVEKIT_URL=http://livekit:7880
-      - LIVEKIT_API_KEY=devkey
-      - LIVEKIT_API_SECRET=secretsecretsecretsecretsecretsecret32
+      - LIVEKIT_URL=${LIVEKIT_URL:-https://your-project.livekit.cloud}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-devkey}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-secretsecretsecretsecretsecretsecret32}
     depends_on:
       - redis
-      - livekit
     restart: unless-stopped
+
+volumes:
+  redis_data:
