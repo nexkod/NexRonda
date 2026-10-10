@@ -25,8 +25,8 @@ class ConvoySession {
 }
 
 class ApiService {
-  // Configurable signaling server base URL
-  static String baseUrl = 'http://localhost:8080';
+  // Production signaling server domain
+  static String baseUrl = 'https://ronda.nexkod.com';
 
   static Future<ConvoySession> createRoom({
     required String name,
