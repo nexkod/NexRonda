@@ -45,5 +45,25 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+
+	<!-- Voice Intercom & Hardware Permissions -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>NexRonda requires microphone access for real-time rider mesh intercom and voice transmission.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>NexRonda uses Bluetooth to connect with motorcycle helmet intercoms and headsets.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>NexRonda uses Bluetooth to route audio to helmet communicators.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>NexRonda tracks convoy coordinates and proximity distance between riders.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>NexRonda tracks convoy position in the background during active rides.</string>
+
+	<!-- Background Modes for Intercom & Telemetry -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>voip</string>
+		<string>location</string>
+	</array>
 </dict>
 </plist>
