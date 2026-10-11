@@ -359,16 +359,19 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               session?.roomName ?? 'Convoy Ride',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             Row(
               children: [
                 Container(
-                  width: 8,
-                  height: 8,
+                  width: 7,
+                  height: 7,
                   decoration: BoxDecoration(
                     color: intercom.state == IntercomState.connected
                         ? Colors.greenAccent
@@ -378,24 +381,24 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
                     shape: BoxShape.circle,
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 5),
                 Text(
                   intercom.state == IntercomState.reconnecting
-                      ? 'TUNNEL / RECONNECTING...'
+                      ? 'RECONNECTING...'
                       : intercom.state.name.toUpperCase(),
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 10,
                     color: intercom.state == IntercomState.reconnecting
                         ? Colors.amberAccent
                         : Colors.white70,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 Text(
                   'PIN: $pin',
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 10,
                     color: Color(0xFF00A8CC),
                     fontWeight: FontWeight.bold,
                   ),
@@ -405,28 +408,74 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
           ],
         ),
         actions: [
+          // Toggle Map / List
           IconButton(
-            icon: const Icon(Icons.add_location_alt, color: Color(0xFF00A8CC)),
-            tooltip: 'Set Target Destination',
-            onPressed: () => _showSetDestinationDialog(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.qr_code_2),
-            tooltip: 'Show Convoy QR',
-            onPressed: () => _showQrDialog(context, pin),
-          ),
-          IconButton(
-            icon: const Icon(Icons.cloud_outlined, color: Colors.white70),
-            tooltip: 'LiveKit Cloud Usage & Limits',
-            onPressed: () => GlobalUsageModal.show(context),
-          ),
-          IconButton(
-            icon: Icon(_showRadarMap ? Icons.view_list : Icons.map),
+            icon: Icon(_showRadarMap ? Icons.view_list : Icons.map, size: 22),
             tooltip: _showRadarMap ? 'View Riders List' : 'View GPS Radar Map',
             onPressed: () => setState(() => _showRadarMap = !_showRadarMap),
           ),
+          // More options menu (Clean & uncluttered)
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, size: 22),
+            color: const Color(0xFF1E293B),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            onSelected: (val) {
+              if (val == 'destination') {
+                _showSetDestinationDialog(context);
+              } else if (val == 'qr') {
+                _showQrDialog(context, pin);
+              } else if (val == 'usage') {
+                GlobalUsageModal.show(context);
+              } else if (val == 'fit_map') {
+                _fitAllRidersAndDestination(intercom);
+              }
+            },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'destination',
+                child: Row(
+                  children: [
+                    Icon(Icons.add_location_alt, color: Color(0xFF00A8CC), size: 18),
+                    SizedBox(width: 10),
+                    Text('Set Destination', style: TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'qr',
+                child: Row(
+                  children: [
+                    Icon(Icons.qr_code_2, color: Colors.white70, size: 18),
+                    SizedBox(width: 10),
+                    Text('Convoy QR Pass', style: TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'usage',
+                child: Row(
+                  children: [
+                    Icon(Icons.cloud_outlined, color: Colors.white70, size: 18),
+                    SizedBox(width: 10),
+                    Text('SFU & Data Usage', style: TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'fit_map',
+                child: Row(
+                  children: [
+                    Icon(Icons.zoom_out_map, color: Colors.white70, size: 18),
+                    SizedBox(width: 10),
+                    Text('Fit All on Map', style: TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          // Leave or End Convoy
           IconButton(
-            icon: const Icon(Icons.call_end, color: Colors.redAccent),
+            icon: const Icon(Icons.call_end, color: Colors.redAccent, size: 22),
             tooltip: 'Leave or End Convoy',
             onPressed: () async {
               final isHost = session?.isCreator ?? false;
