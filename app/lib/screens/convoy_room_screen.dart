@@ -160,7 +160,10 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> with WidgetsBinding
             } else if (action == 'ptt_up') {
               intercom.pttUp();
             } else if (action == 'open_app') {
-              // Overlay asks to focus app (Android will bring activity to front)
+              // Overlay asks to focus app (Bring Android activity to front)
+              const MethodChannel('com.nexkod.nexronda/navigation')
+                  .invokeMethod('bringToFront')
+                  .catchError((_) => null);
             }
           }
         } catch (_) {}
