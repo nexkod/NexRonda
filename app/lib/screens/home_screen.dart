@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -67,11 +69,14 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     }
 
-    // Auto check for update from NexEdar
-    _checkForUpdates();
+    // Auto check for update from NexEdar (Android only)
+    if (!kIsWeb && Platform.isAndroid) {
+      _checkForUpdates();
+    }
   }
 
   Future<void> _checkForUpdates({bool showNoUpdateNotice = false}) async {
+    if (kIsWeb || !Platform.isAndroid) return;
     try {
       final release = await UpdateService.checkForUpdate();
       if (release != null && mounted) {
@@ -290,30 +295,32 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(20),
-                    onTap: () => _checkForUpdates(showNoUpdateNotice: true),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.4)),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.system_update, size: 13, color: Colors.amberAccent),
-                          SizedBox(width: 5),
-                          Text(
-                            'Check Update',
-                            style: TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.w600),
-                          ),
-                        ],
+                  if (!kIsWeb && Platform.isAndroid) ...[
+                    const SizedBox(width: 8),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: () => _checkForUpdates(showNoUpdateNotice: true),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E293B),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.4)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.system_update, size: 13, color: Colors.amberAccent),
+                            SizedBox(width: 5),
+                            Text(
+                              'Check Update',
+                              style: TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ),
               const SizedBox(height: 20),
