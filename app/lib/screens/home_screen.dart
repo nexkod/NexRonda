@@ -7,6 +7,7 @@ import '../services/intercom_service.dart';
 import 'convoy_room_screen.dart';
 import 'qr_scanner_screen.dart';
 import '../widgets/global_usage_modal.dart';
+import '../services/update_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -65,6 +66,26 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       });
     }
+
+    // Auto check for update from NexEdar
+    _checkForUpdates();
+  }
+
+  Future<void> _checkForUpdates({bool showNoUpdateNotice = false}) async {
+    try {
+      final release = await UpdateService.checkForUpdate();
+      if (release != null && mounted) {
+        await UpdateService.showUpdateDialog(context, release);
+      } else if (showNoUpdateNotice && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('NexRonda is up to date!'),
+            backgroundColor: Color(0xFF10B981),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (_) {}
   }
 
   Future<void> _saveActiveRide(ConvoySession session) async {
@@ -243,32 +264,57 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              Center(
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: () => GlobalUsageModal.show(context),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFF00A8CC).withValues(alpha: 0.4)),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.cloud_done, size: 14, color: Colors.greenAccent),
-                        SizedBox(width: 6),
-                        Text(
-                          'LiveKit SFU: Online (View Usage Limits)',
-                          style: TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.w600),
-                        ),
-                        SizedBox(width: 4),
-                        Icon(Icons.chevron_right, size: 14, color: Colors.white38),
-                      ],
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () => GlobalUsageModal.show(context),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFF00A8CC).withValues(alpha: 0.4)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.cloud_done, size: 13, color: Colors.greenAccent),
+                          SizedBox(width: 5),
+                          Text(
+                            'SFU Limits',
+                            style: TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () => _checkForUpdates(showNoUpdateNotice: true),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.4)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.system_update, size: 13, color: Colors.amberAccent),
+                          SizedBox(width: 5),
+                          Text(
+                            'Check Update',
+                            style: TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 20),
 
