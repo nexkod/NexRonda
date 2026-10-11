@@ -43,7 +43,9 @@ class NexEdarRelease {
     );
   }
 
-  String get downloadUrl => 'https://edar.nexkod.com/p/$projectId/download/$id';
+  String get downloadUrl => id > 0
+      ? 'https://edar.nexkod.com/p/$projectId/download/$id'
+      : 'https://edar.nexkod.com/p/$projectId/download/latest';
   String get portalUrl => 'https://edar.nexkod.com/p/$projectId';
 
   String get fileSizeFormatted {
@@ -54,38 +56,94 @@ class NexEdarRelease {
 }
 
 
+class UpdateCheckResult {
+  final bool hasUpdate;
+  final int currentCode;
+  final NexEdarRelease? release;
+  final String? error;
+
+  UpdateCheckResult({
+    required this.hasUpdate,
+    required this.currentCode,
+    this.release,
+    this.error,
+  });
+}
+
 class UpdateService {
   /// Fetches the latest published release on NexEdar
   static Future<NexEdarRelease?> checkLatestRelease({String projectId = 'nexronda'}) async {
     try {
-      final url = Uri.parse('https://edar.nexkod.com/api/v1/apps/$projectId/releases');
-      final res = await http.get(url).timeout(const Duration(seconds: 4));
+      // 1. Try /latest endpoint first
+      final latestUrl = Uri.parse('https://edar.nexkod.com/api/v1/apps/$projectId/latest');
+      final res = await http.get(latestUrl).timeout(const Duration(seconds: 4));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
+        if (data.containsKey('version_code')) {
+          // Flatten into NexEdarRelease
+          return NexEdarRelease(
+            id: (data['id'] as num?)?.toInt() ?? 0,
+            projectId: data['project_id'] as String? ?? projectId,
+            versionName: data['version_name'] as String? ?? '1.0.0',
+            versionCode: (data['version_code'] as num?)?.toInt() ?? 1,
+            fileSizeBytes: (data['file_size'] as num?)?.toInt() ?? 0,
+            sha256: data['sha256'] as String? ?? '',
+            changelog: data['changelog'] as String? ?? '',
+            isMandatory: data['is_mandatory'] as bool? ?? false,
+            createdAt: data['published_at'] as String? ?? '',
+          );
+        }
+      }
+
+      // 2. Fallback to /releases endpoint
+      final releasesUrl = Uri.parse('https://edar.nexkod.com/api/v1/apps/$projectId/releases');
+      final resList = await http.get(releasesUrl).timeout(const Duration(seconds: 4));
+      if (resList.statusCode == 200) {
+        final data = jsonDecode(resList.body) as Map<String, dynamic>;
         final releases = data['releases'] as List<dynamic>?;
         if (releases != null && releases.isNotEmpty) {
-          // The first release is the newest (sorted by ID DESC)
           return NexEdarRelease.fromJson(releases.first as Map<String, dynamic>);
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[UpdateService] checkLatestRelease error: $e');
+    }
     return null;
   }
 
   /// Checks if an update is available compared to the currently running version
-  static Future<NexEdarRelease?> checkForUpdate() async {
+  static Future<UpdateCheckResult> checkUpdateStatus() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
       final currentCode = int.tryParse(packageInfo.buildNumber) ?? 1;
 
       final latest = await checkLatestRelease();
-      if (latest != null && latest.versionCode > currentCode) {
-        return latest;
+      if (latest != null) {
+        return UpdateCheckResult(
+          hasUpdate: latest.versionCode > currentCode,
+          currentCode: currentCode,
+          release: latest,
+        );
       }
+      return UpdateCheckResult(
+        hasUpdate: false,
+        currentCode: currentCode,
+        error: 'Unable to connect to NexEdar server',
+      );
     } catch (e) {
       debugPrint('[UpdateService] Error checking update: $e');
+      return UpdateCheckResult(
+        hasUpdate: false,
+        currentCode: 1,
+        error: e.toString(),
+      );
     }
+  }
+
+  static Future<NexEdarRelease?> checkForUpdate() async {
+    final status = await checkUpdateStatus();
+    if (status.hasUpdate) return status.release;
     return null;
   }
 

@@ -78,19 +78,31 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _checkForUpdates({bool showNoUpdateNotice = false}) async {
     if (kIsWeb || !Platform.isAndroid) return;
     try {
-      final release = await UpdateService.checkForUpdate();
-      if (release != null && mounted) {
-        await UpdateService.showUpdateDialog(context, release);
+      final status = await UpdateService.checkUpdateStatus();
+      if (status.hasUpdate && status.release != null && mounted) {
+        await UpdateService.showUpdateDialog(context, status.release!);
       } else if (showNoUpdateNotice && mounted) {
+        final msg = status.error != null
+            ? 'Update check failed: ${status.error}'
+            : 'NexRonda is up to date (Installed build: +${status.currentCode}, Latest: +${status.release?.versionCode ?? status.currentCode})';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('NexRonda is up to date!'),
-            backgroundColor: Color(0xFF10B981),
-            duration: Duration(seconds: 2),
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: status.error != null ? Colors.redAccent : const Color(0xFF10B981),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      if (showNoUpdateNotice && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _saveActiveRide(ConvoySession session) async {
