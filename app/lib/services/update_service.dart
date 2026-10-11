@@ -116,7 +116,12 @@ class UpdateService {
   static Future<UpdateCheckResult> checkUpdateStatus() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
-      final currentCode = int.tryParse(packageInfo.buildNumber) ?? 1;
+      final rawCode = int.tryParse(packageInfo.buildNumber) ?? 1;
+      // Flutter's --split-per-abi adds an ABI offset to Android versionCode:
+      // 1000 for armeabi-v7a, 2000 for arm64-v8a, 3000 for x86_64.
+      // So build +7 on arm64 becomes 2007 in PackageInfo.buildNumber.
+      // Modulo 1000 retrieves the true logical buildNumber.
+      final currentCode = rawCode >= 1000 ? (rawCode % 1000) : rawCode;
 
       final latest = await checkLatestRelease();
       if (latest != null) {
