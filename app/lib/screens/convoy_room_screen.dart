@@ -6,6 +6,9 @@ import 'package:livekit_client/livekit_client.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/foundation.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
+import '../services/web_background_service.dart';
 import '../models/rider_telemetry.dart';
 import '../services/api_service.dart';
 import '../services/intercom_service.dart';
@@ -23,6 +26,35 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
   final MapController _mapController = MapController();
   bool _showRadarMap = true;
   bool _hasFittedInitialBounds = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Keep screen awake while inside convoy room (Crucial for handlebar mount / web)
+    try {
+      WakelockPlus.enable();
+    } catch (_) {}
+
+    // On web, start the silent audio loop & MediaSession hook to prevent mobile browser throttling
+    if (kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final intercom = context.read<IntercomService>();
+        final roomName = intercom.session?.roomName ?? 'NexRonda Convoy';
+        WebBackgroundService.enable(roomName);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    try {
+      WakelockPlus.disable();
+    } catch (_) {}
+    if (kIsWeb) {
+      WebBackgroundService.disable();
+    }
+    super.dispose();
+  }
 
   void _fitAllRidersAndDestination(IntercomService intercom) {
     // If we're not showing the radar map, switch to it first

@@ -49,6 +49,7 @@ dependencies:
   audioplayers: ^6.8.1
   url_launcher: ^6.3.3
   package_info_plus: ^10.2.2
+  wakelock_plus: ^1.8.0
 
 dev_dependencies:
   flutter_test:

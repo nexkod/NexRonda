@@ -29,8 +29,52 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>nexronda</title>
+  <title>NexRonda - Mesh Intercom</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- Background Audio Loop & MediaSession Bridge for Mobile Browser/PWA -->
+  <script>
+    let backgroundAudioElement = null;
+
+    function initBackgroundAudio() {
+      if (backgroundAudioElement) return;
+      // 1-second silent WAV base64 loop to maintain audio session & prevent browser background throttling
+      const silentWavBase64 = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAP8A/w==";
+      backgroundAudioElement = new Audio(silentWavBase64);
+      backgroundAudioElement.loop = true;
+      backgroundAudioElement.volume = 0.01;
+    }
+
+    window.enableBackgroundIntercom = function(roomName) {
+      initBackgroundAudio();
+      if (backgroundAudioElement) {
+        backgroundAudioElement.play().catch(e => console.log('[NexRonda] Audio play hint:', e));
+      }
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: 'NexRonda Convoy Intercom',
+          artist: roomName || 'Active Ride',
+          album: 'NexRonda Mesh',
+          artwork: [{ src: 'icons/Icon-192.png', sizes: '192x192', type: 'image/png' }]
+        });
+        navigator.mediaSession.setActionHandler('play', () => {
+          if (backgroundAudioElement) backgroundAudioElement.play();
+        });
+        navigator.mediaSession.setActionHandler('pause', () => {
+          // Keep audio session alive or mute
+        });
+      }
+    };
+
+    window.disableBackgroundIntercom = function() {
+      if (backgroundAudioElement) {
+        backgroundAudioElement.pause();
+      }
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = null;
+      }
+    };
+  </script>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>
