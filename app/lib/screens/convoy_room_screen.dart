@@ -22,6 +22,57 @@ class ConvoyRoomScreen extends StatefulWidget {
 class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
   final MapController _mapController = MapController();
   bool _showRadarMap = true;
+  bool _hasFittedInitialBounds = false;
+
+  void _fitAllRidersAndDestination(IntercomService intercom) {
+    final points = <LatLng>[];
+
+    // Local position
+    if (intercom.currentPosition != null) {
+      points.add(LatLng(intercom.currentPosition!.latitude, intercom.currentPosition!.longitude));
+    }
+
+    // Remote riders
+    for (final t in intercom.telemetries.values) {
+      if (t.latitude != 0.0 && t.longitude != 0.0) {
+        points.add(LatLng(t.latitude, t.longitude));
+      }
+    }
+
+    // Destination
+    if (intercom.destination != null &&
+        intercom.destination!.latitude != 0.0 &&
+        intercom.destination!.longitude != 0.0) {
+      points.add(LatLng(intercom.destination!.latitude, intercom.destination!.longitude));
+    }
+
+    if (points.isEmpty) return;
+
+    if (points.length == 1) {
+      _mapController.move(points.first, 15.0);
+      return;
+    }
+
+    try {
+      final bounds = LatLngBounds.fromPoints(points);
+      _mapController.fitCamera(
+        CameraFit.bounds(
+          bounds: bounds,
+          padding: const EdgeInsets.all(50),
+        ),
+      );
+    } catch (_) {}
+  }
+
+  void _focusOnRider(double lat, double lng) {
+    if (lat == 0.0 && lng == 0.0) return;
+    setState(() {
+      _showRadarMap = true;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _mapController.move(LatLng(lat, lng), 16.5);
+    });
+  }
 
   Future<void> _openNavigationApp(double lat, double lng, String label) async {
     // Universal geo scheme opening Apple Maps on iOS or Google Maps / Waze
@@ -585,6 +636,14 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
                             options: MapOptions(
                               initialCenter: centerLatLng,
                               initialZoom: 15.0,
+                              onMapReady: () {
+                                if (!_hasFittedInitialBounds) {
+                                  _hasFittedInitialBounds = true;
+                                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                                    _fitAllRidersAndDestination(intercom);
+                                  });
+                                }
+                              },
                             ),
                             children: [
                               TileLayer(
@@ -677,12 +736,29 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
                           Positioned(
                             bottom: 16,
                             right: 16,
-                            child: FloatingActionButton.small(
-                              backgroundColor: const Color(0xFF1E293B),
-                              onPressed: () {
-                                _mapController.move(centerLatLng, 15.0);
-                              },
-                              child: const Icon(Icons.my_location, color: Colors.white),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Fit all riders button
+                                FloatingActionButton.small(
+                                  heroTag: 'btn_fit_all',
+                                  backgroundColor: const Color(0xFF1E293B),
+                                  tooltip: 'Fit All Riders & Destination',
+                                  onPressed: () => _fitAllRidersAndDestination(intercom),
+                                  child: const Icon(Icons.zoom_out_map, color: Color(0xFF00A8CC), size: 18),
+                                ),
+                                const SizedBox(height: 8),
+                                // Center on self
+                                FloatingActionButton.small(
+                                  heroTag: 'btn_center_self',
+                                  backgroundColor: const Color(0xFF1E293B),
+                                  tooltip: 'Center on Me',
+                                  onPressed: () {
+                                    _mapController.move(centerLatLng, 15.0);
+                                  },
+                                  child: const Icon(Icons.my_location, color: Colors.white, size: 18),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -696,37 +772,57 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
                         final isSpeaking = participant.isSpeaking;
                         final t = intercom.telemetries[participant.identity];
 
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1E293B),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: isSpeaking ? Colors.greenAccent : Colors.white12,
-                              width: isSpeaking ? 2 : 1,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                backgroundColor: isSpeaking
-                                    ? Colors.greenAccent.withValues(alpha: 0.2)
-                                    : Colors.white10,
-                                child: Icon(
-                                  Icons.two_wheeler,
-                                  color: isSpeaking ? Colors.greenAccent : Colors.white70,
-                                ),
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () {
+                            if (t != null && t.latitude != 0.0) {
+                              _focusOnRider(t.latitude, t.longitude);
+                            } else if (participant is LocalParticipant && intercom.currentPosition != null) {
+                              _focusOnRider(
+                                intercom.currentPosition!.latitude,
+                                intercom.currentPosition!.longitude,
+                              );
+                            }
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E293B),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isSpeaking ? Colors.greenAccent : Colors.white12,
+                                width: isSpeaking ? 2 : 1,
                               ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      participant.name.isNotEmpty ? participant.name : participant.identity,
-                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                    ),
+                            ),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  backgroundColor: isSpeaking
+                                      ? Colors.greenAccent.withValues(alpha: 0.2)
+                                      : Colors.white10,
+                                  child: Icon(
+                                    Icons.two_wheeler,
+                                    color: isSpeaking ? Colors.greenAccent : Colors.white70,
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              participant.name.isNotEmpty ? participant.name : participant.identity,
+                                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                            ),
+                                          ),
+                                          if (t != null && t.latitude != 0.0)
+                                            const Icon(Icons.map_outlined, size: 14, color: Color(0xFF00A8CC)),
+                                        ],
+                                      ),
                                     Row(
                                       children: [
                                         Text(
@@ -799,8 +895,9 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
                               ),
                             ],
                           ),
-                        );
-                      },
+                        ),
+                      );
+                    },
                     ),
             ),
 
