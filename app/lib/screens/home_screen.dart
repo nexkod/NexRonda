@@ -8,6 +8,7 @@ import '../services/api_service.dart';
 import '../services/intercom_service.dart';
 import 'convoy_room_screen.dart';
 import 'qr_scanner_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../widgets/global_usage_modal.dart';
 import '../services/update_service.dart';
 
@@ -434,57 +435,109 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 28),
 
-              // Create Convoy Card
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      'Host a New Convoy',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _roomNameController,
-                      decoration: InputDecoration(
-                        labelText: 'Convoy Ride Title',
-                        prefixIcon: const Icon(Icons.route),
-                        filled: true,
-                        fillColor: const Color(0xFF0F172A),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
+              // Create Convoy Card (Restricted on Web to protect server bandwidth)
+              if (!kIsWeb)
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Host a New Convoy',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _roomNameController,
+                        decoration: InputDecoration(
+                          labelText: 'Convoy Ride Title',
+                          prefixIcon: const Icon(Icons.route),
+                          filled: true,
+                          fillColor: const Color(0xFF0F172A),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide.none,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF10B981),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF10B981),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
+                        onPressed: _isLoading ? null : _createConvoy,
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Text('CREATE CONVOY ROOM', style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
-                      onPressed: _isLoading ? null : _createConvoy,
-                      child: _isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Text('CREATE CONVOY ROOM', style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                  ],
+                    ],
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF00A8CC).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFF00A8CC).withValues(alpha: 0.4)),
+                  ),
+                  child: Column(
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Color(0xFF00A8CC), size: 20),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Web Portal: Join-Only Mode',
+                              style: TextStyle(
+                                color: Color(0xFF00A8CC),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'To conserve bandwidth and ensure mesh quality, hosting new convoy rooms is reserved for the native mobile app. Web users can join existing rides using a 6-digit PIN below.',
+                        style: TextStyle(fontSize: 12, color: Colors.white70, height: 1.4),
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF00A8CC),
+                          side: const BorderSide(color: Color(0xFF00A8CC)),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.download, size: 16),
+                        label: const Text('Get Android APK from NexEdar', style: TextStyle(fontSize: 12)),
+                        onPressed: () async {
+                          final uri = Uri.parse('https://edar.nexkod.com/p/nexronda');
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
                 ),
-              ),
               const SizedBox(height: 24),
 
               // Join Convoy with PIN
