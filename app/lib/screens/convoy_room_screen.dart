@@ -141,12 +141,10 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> with WidgetsBinding
     }
   }
 
-  static StreamSubscription? _staticOverlaySub;
-
   void _initOverlayListener() {
-    if (_staticOverlaySub != null) return;
+    _overlaySub?.cancel();
     try {
-      _staticOverlaySub = FlutterOverlayWindow.overlayListener.listen((event) {
+      _overlaySub = FlutterOverlayWindow.overlayListener.listen((event) {
         if (!mounted || event == null) return;
         try {
           final data = event is String ? jsonDecode(event) : event;
@@ -163,10 +161,15 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> with WidgetsBinding
               // Overlay asks to focus app (Bring Android activity to front)
               const MethodChannel('com.nexkod.nexronda/navigation')
                   .invokeMethod('bringToFront')
-                  .catchError((_) => null);
+                  .catchError((e) {
+                debugPrint('[ConvoyRoomScreen] bringToFront error: $e');
+                return null;
+              });
             }
           }
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[ConvoyRoomScreen] Error decoding overlay action: $e');
+        }
       });
     } catch (e) {
       debugPrint('[ConvoyRoomScreen] overlayListener error: $e');

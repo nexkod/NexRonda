@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class NexEdarRelease {
@@ -156,87 +158,271 @@ class UpdateService {
     return showDialog(
       context: context,
       barrierDismissible: !release.isMandatory,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF00A8CC).withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.system_update, color: Color(0xFF00A8CC), size: 24),
+      builder: (ctx) => _UpdateDialog(release: release),
+    );
+  }
+}
+
+class _UpdateDialog extends StatefulWidget {
+  final NexEdarRelease release;
+
+  const _UpdateDialog({required this.release});
+
+  @override
+  State<_UpdateDialog> createState() => _UpdateDialogState();
+}
+
+class _UpdateDialogState extends State<_UpdateDialog> {
+  bool _isDownloading = false;
+  double _progress = 0.0;
+  int _receivedBytes = 0;
+  int _totalBytes = 0;
+  String? _errorMessage;
+  http.Client? _client;
+
+  @override
+  void dispose() {
+    _client?.close();
+    super.dispose();
+  }
+
+  Future<void> _startInAppDownload() async {
+    setState(() {
+      _isDownloading = true;
+      _errorMessage = null;
+      _progress = 0.0;
+      _receivedBytes = 0;
+      _totalBytes = widget.release.fileSizeBytes;
+    });
+
+    try {
+      _client = http.Client();
+      final request = http.Request('GET', Uri.parse(widget.release.downloadUrl));
+      final response = await _client!.send(request);
+
+      if (response.statusCode != 200) {
+        throw Exception('Download failed (HTTP ${response.statusCode})');
+      }
+
+      final contentLength = response.contentLength ?? widget.release.fileSizeBytes;
+      if (contentLength > 0) {
+        setState(() => _totalBytes = contentLength);
+      }
+
+      final tempDir = await getTemporaryDirectory();
+      final saveFile = File('${tempDir.path}/nexronda_update_v${widget.release.versionCode}.apk');
+      if (await saveFile.exists()) {
+        await saveFile.delete();
+      }
+
+      final sink = saveFile.openWrite();
+
+      await for (final chunk in response.stream) {
+        if (!mounted) {
+          await sink.close();
+          return;
+        }
+        sink.add(chunk);
+        _receivedBytes += chunk.length;
+        if (_totalBytes > 0) {
+          setState(() {
+            _progress = (_receivedBytes / _totalBytes).clamp(0.0, 1.0);
+          });
+        }
+      }
+
+      await sink.flush();
+      await sink.close();
+
+      if (!mounted) return;
+
+      // Automatically launch the APK installer
+      final result = await OpenFilex.open(
+        saveFile.path,
+        type: 'application/vnd.android.package-archive',
+      );
+
+      debugPrint('[UpdateService] OpenFilex result: ${result.type} - ${result.message}');
+
+      if (result.type != ResultType.done) {
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'Could not start installer automatically: ${result.message}';
+          });
+        }
+      } else {
+        if (mounted && !widget.release.isMandatory) {
+          Navigator.of(context).pop();
+        }
+      }
+    } catch (e) {
+      debugPrint('[UpdateService] Download error: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Download failed: $e';
+          _isDownloading = false;
+        });
+      }
+    } finally {
+      if (mounted && _errorMessage == null) {
+        setState(() => _isDownloading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final release = widget.release;
+    final receivedMb = (_receivedBytes / (1024 * 1024)).toStringAsFixed(1);
+    final totalMb = (_totalBytes / (1024 * 1024)).toStringAsFixed(1);
+    final percentage = (_progress * 100).toInt();
+
+    return AlertDialog(
+      backgroundColor: const Color(0xFF1E293B),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF00A8CC).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
             ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text(
-                'Update Available',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
+            child: const Icon(Icons.system_update, color: Color(0xFF00A8CC), size: 24),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Update Available',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF00A8CC),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    'v${release.versionName}+${release.versionCode}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
-                  ),
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00A8CC),
+                  borderRadius: BorderRadius.circular(6),
                 ),
-                if (release.fileSizeFormatted.isNotEmpty) ...[
-                  const SizedBox(width: 8),
-                  Text(
-                    release.fileSizeFormatted,
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
-                  ),
-                ],
+                child: Text(
+                  'v${release.versionName}+${release.versionCode}',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
+                ),
+              ),
+              if (release.fileSizeFormatted.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Text(
+                  release.fileSizeFormatted,
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
               ],
-            ),
-            const SizedBox(height: 14),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (!_isDownloading && _errorMessage == null) ...[
             const Text(
               "What's New:",
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white70),
             ),
             const SizedBox(height: 6),
             Container(
+              constraints: const BoxConstraints(maxHeight: 120),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: const Color(0xFF0F172A),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: Colors.white12),
               ),
-              child: Text(
-                release.changelog.isNotEmpty ? release.changelog : 'General improvements and bug fixes.',
-                style: const TextStyle(fontSize: 12, color: Colors.white70, height: 1.4),
+              child: SingleChildScrollView(
+                child: Text(
+                  release.changelog.isNotEmpty ? release.changelog : 'General improvements and bug fixes.',
+                  style: const TextStyle(fontSize: 12, color: Colors.white70, height: 1.4),
+                ),
               ),
             ),
-            const SizedBox(height: 10),
-            Text(
-              !kIsWeb && Platform.isAndroid
-                  ? 'Tap "UPDATE NOW" to download and install the latest APK directly from NexEdar.'
-                  : 'Tap "VIEW RELEASE" to open the NexEdar portal.',
-              style: const TextStyle(fontSize: 11, color: Colors.white38),
+          ],
+          if (_isDownloading) ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Downloading update...',
+                  style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  '$percentage%',
+                  style: const TextStyle(color: Color(0xFF00A8CC), fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: _totalBytes > 0 ? _progress : null,
+                minHeight: 8,
+                backgroundColor: const Color(0xFF0F172A),
+                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF00A8CC)),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                _totalBytes > 0 ? '$receivedMb MB / $totalMb MB' : '$receivedMb MB',
+                style: const TextStyle(color: Colors.white38, fontSize: 11),
+              ),
             ),
           ],
-        ),
-        actions: [
-          if (!release.isMandatory)
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('LATER', style: TextStyle(color: Colors.white54)),
+          if (_errorMessage != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.redAccent, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: Colors.redAccent, fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
             ),
+          ],
+          const SizedBox(height: 10),
+          Text(
+            !kIsWeb && Platform.isAndroid
+                ? (_isDownloading
+                    ? 'The installer will automatically open when complete.'
+                    : 'Download progress will show in-app and launch install automatically.')
+                : 'Tap "VIEW RELEASE" to open the NexEdar portal.',
+            style: const TextStyle(fontSize: 11, color: Colors.white38),
+          ),
+        ],
+      ),
+      actions: [
+        if (!release.isMandatory && !_isDownloading)
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('LATER', style: TextStyle(color: Colors.white54)),
+          ),
+        if (!_isDownloading)
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF00A8CC),
@@ -244,44 +430,30 @@ class UpdateService {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            icon: const Icon(Icons.download, size: 18),
+            icon: Icon(_errorMessage != null ? Icons.refresh : Icons.download, size: 18),
             label: Text(
-              !kIsWeb && Platform.isAndroid ? 'UPDATE NOW' : 'VIEW RELEASE',
+              !kIsWeb && Platform.isAndroid
+                  ? (_errorMessage != null ? 'RETRY' : 'UPDATE NOW')
+                  : 'VIEW RELEASE',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             onPressed: () async {
-              final targetUrl = !kIsWeb && Platform.isAndroid
-                  ? Uri.parse(release.downloadUrl)
-                  : Uri.parse(release.portalUrl);
-
-              try {
-                final launched = await launchUrl(
-                  targetUrl,
-                  mode: LaunchMode.externalApplication,
-                );
-                if (!launched) {
-                  // Fallback without mode
+              if (!kIsWeb && Platform.isAndroid) {
+                await _startInAppDownload();
+              } else {
+                final targetUrl = Uri.parse(release.portalUrl);
+                try {
+                  await launchUrl(targetUrl, mode: LaunchMode.externalApplication);
+                } catch (_) {
                   await launchUrl(targetUrl);
                 }
-              } catch (e) {
-                debugPrint('[UpdateService] Failed to launch update URL: $e');
-                if (ctx.mounted) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    SnackBar(
-                      content: Text('Could not open download link: $e'),
-                      backgroundColor: Colors.redAccent,
-                    ),
-                  );
+                if (context.mounted && !release.isMandatory) {
+                  Navigator.of(context).pop();
                 }
-              }
-
-              if (ctx.mounted && !release.isMandatory) {
-                Navigator.of(ctx).pop();
               }
             },
           ),
-        ],
-      ),
+      ],
     );
   }
 }

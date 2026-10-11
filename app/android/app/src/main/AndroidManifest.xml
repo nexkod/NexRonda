@@ -28,6 +28,9 @@
     <!-- Assistive Floating Bubble Overlay (over Google Maps / Waze) -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
+    <!-- In-app APK updates -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
         android:label="NexRonda"
         android:name="${applicationName}"
