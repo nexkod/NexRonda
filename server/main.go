@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -304,6 +305,30 @@ func main() {
 			"server_time": time.Now().Unix(),
 		})
 	})
+
+	// Serve Web Portal (if webdist folder exists)
+	if _, err := os.Stat("webdist"); err == nil {
+		router.Static("/assets", "webdist/assets")
+		router.Static("/canvaskit", "webdist/canvaskit")
+		router.Static("/icons", "webdist/icons")
+		router.StaticFile("/favicon.png", "webdist/favicon.png")
+		router.StaticFile("/flutter_bootstrap.js", "webdist/flutter_bootstrap.js")
+		router.StaticFile("/flutter_service_worker.js", "webdist/flutter_service_worker.js")
+		router.StaticFile("/flutter.js", "webdist/flutter.js")
+		router.StaticFile("/main.dart.js", "webdist/main.dart.js")
+		router.StaticFile("/manifest.json", "webdist/manifest.json")
+		router.StaticFile("/version.json", "webdist/version.json")
+		router.StaticFile("/", "webdist/index.html")
+
+		router.NoRoute(func(c *gin.Context) {
+			path := c.Request.URL.Path
+			if strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/health") {
+				c.JSON(http.StatusNotFound, gin.H{"error": "API route not found"})
+				return
+			}
+			c.File("webdist/index.html")
+		})
+	}
 
 	router.Run(":" + srv.cfg.Port)
 }

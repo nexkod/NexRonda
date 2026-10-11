@@ -12,6 +12,7 @@ RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /root/
 COPY --from=builder /app/nexronda-server .
+COPY --from=builder /app/webdist ./webdist
 
 EXPOSE 8080
 CMD ["./nexronda-server"]
