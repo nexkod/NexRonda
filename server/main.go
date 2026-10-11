@@ -43,10 +43,11 @@ type JoinRoomRequest struct {
 }
 
 type TokenResponse struct {
-	Token     string `json:"token"`
-	RoomName  string `json:"room_name"`
-	RoomPIN   string `json:"room_pin"`
+	Token      string `json:"token"`
+	RoomName   string `json:"room_name"`
+	RoomPIN    string `json:"room_pin"`
 	LiveKitURL string `json:"livekit_url"`
+	IsCreator  bool   `json:"is_creator"`
 }
 
 func generate6DigitPIN() (string, error) {
@@ -184,6 +185,7 @@ func main() {
 			RoomName:   req.Name,
 			RoomPIN:    pin,
 			LiveKitURL: srv.cfg.LiveKitURL,
+			IsCreator:  true,
 		})
 	})
 
@@ -204,6 +206,9 @@ func main() {
 		}
 
 		roomName := vals["name"]
+		creatorID := vals["creator_id"]
+		isCreator := (creatorID != "" && creatorID == req.RiderID)
+
 		token, err := srv.createLiveKitToken(req.PIN, req.RiderID, req.RiderName)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to mint LiveKit token"})
@@ -215,6 +220,7 @@ func main() {
 			RoomName:   roomName,
 			RoomPIN:    req.PIN,
 			LiveKitURL: srv.cfg.LiveKitURL,
+			IsCreator:  isCreator,
 		})
 	})
 

@@ -19,7 +19,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _riderNameController = TextEditingController(text: 'Rider 1');
   final _roomNameController = TextEditingController(text: 'Sunday Morning Ride');
   final _pinController = TextEditingController();
-  final String _riderId = const Uuid().v4();
+  String _riderId = const Uuid().v4();
   bool _isLoading = false;
 
   @override
@@ -35,11 +35,21 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadSavedRide();
+    _initRiderIdAndSavedRide();
   }
 
-  Future<void> _loadSavedRide() async {
+  Future<void> _initRiderIdAndSavedRide() async {
     final prefs = await SharedPreferences.getInstance();
+    
+    // Persistent Rider Device ID across restarts/resumes
+    var savedRiderId = prefs.getString('persistent_rider_id');
+    if (savedRiderId == null || savedRiderId.isEmpty) {
+      savedRiderId = const Uuid().v4();
+      await prefs.setString('persistent_rider_id', savedRiderId);
+    }
+    _riderId = savedRiderId;
+
+    // Load active ride
     final savedPin = prefs.getString('active_convoy_pin');
     final savedName = prefs.getString('active_convoy_name');
     final isHost = prefs.getBool('active_convoy_is_host') ?? false;
@@ -127,11 +137,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final session = await ApiService.joinRoom(
+      var session = await ApiService.joinRoom(
         pin: pin,
         riderId: _riderId,
         riderName: _riderNameController.text.trim(),
       );
+
+      // If resuming a ride previously saved as host, guarantee isCreator is true
+      if (!session.isCreator && _activeSession != null && _activeSession!.roomPin == pin && _activeSession!.isCreator) {
+        session = ConvoySession(
+          token: session.token,
+          roomName: session.roomName,
+          roomPin: session.roomPin,
+          liveKitUrl: session.liveKitUrl,
+          isCreator: true,
+        );
+      }
 
       await _saveActiveRide(session);
 

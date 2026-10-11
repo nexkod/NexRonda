@@ -17,12 +17,13 @@ class ConvoySession {
   });
 
   factory ConvoySession.fromJson(Map<String, dynamic> json, {bool isCreator = false}) {
+    final serverIsCreator = json['is_creator'] as bool?;
     return ConvoySession(
       token: json['token'] as String,
       roomName: json['room_name'] as String,
       roomPin: json['room_pin'] as String,
       liveKitUrl: json['livekit_url'] as String,
-      isCreator: isCreator,
+      isCreator: serverIsCreator ?? isCreator,
     );
   }
 }
