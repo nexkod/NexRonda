@@ -255,9 +255,27 @@ class UpdateService {
                   ? Uri.parse(release.downloadUrl)
                   : Uri.parse(release.portalUrl);
 
-              if (await canLaunchUrl(targetUrl)) {
-                await launchUrl(targetUrl, mode: LaunchMode.externalApplication);
+              try {
+                final launched = await launchUrl(
+                  targetUrl,
+                  mode: LaunchMode.externalApplication,
+                );
+                if (!launched) {
+                  // Fallback without mode
+                  await launchUrl(targetUrl);
+                }
+              } catch (e) {
+                debugPrint('[UpdateService] Failed to launch update URL: $e');
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(
+                      content: Text('Could not open download link: $e'),
+                      backgroundColor: Colors.redAccent,
+                    ),
+                  );
+                }
               }
+
               if (ctx.mounted && !release.isMandatory) {
                 Navigator.of(ctx).pop();
               }
