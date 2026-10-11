@@ -11,6 +11,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/livekit/protocol/auth"
+	"github.com/livekit/protocol/livekit"
+	lksdk "github.com/livekit/server-sdk-go/v2"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -23,8 +25,9 @@ type Config struct {
 }
 
 type Server struct {
-	cfg   Config
-	rdb   *redis.Client
+	cfg        Config
+	rdb        *redis.Client
+	roomClient *lksdk.RoomServiceClient
 }
 
 type CreateRoomRequest struct {
@@ -108,9 +111,15 @@ func main() {
 		Addr: cfg.RedisURL,
 	})
 
+	var roomClient *lksdk.RoomServiceClient
+	if cfg.LiveKitURL != "" && cfg.LiveKitAPIKey != "" && cfg.LiveKitAPISecret != "" {
+		roomClient = lksdk.NewRoomServiceClient(cfg.LiveKitURL, cfg.LiveKitAPIKey, cfg.LiveKitAPISecret)
+	}
+
 	srv := &Server{
-		cfg: cfg,
-		rdb: rdb,
+		cfg:        cfg,
+		rdb:        rdb,
+		roomClient: roomClient,
 	}
 
 	router := gin.Default()
@@ -237,6 +246,56 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "ended",
 			"message": "Convoy room has been ended successfully",
+		})
+	})
+
+	// Global LiveKit Usage & Cloud Limit
+	router.GET("/api/usage", func(c *gin.Context) {
+		ctx := c.Request.Context()
+
+		activeRooms := 0
+		activeParticipants := 0
+		var liveRoomsList []gin.H
+
+		if srv.roomClient != nil {
+			resp, err := srv.roomClient.ListRooms(ctx, &livekit.ListRoomsRequest{})
+			if err == nil && resp != nil {
+				activeRooms = len(resp.Rooms)
+				for _, r := range resp.Rooms {
+					activeParticipants += int(r.NumParticipants)
+					liveRoomsList = append(liveRoomsList, gin.H{
+						"name":         r.Name,
+						"participants": r.NumParticipants,
+						"creation_time": r.CreationTime,
+					})
+				}
+			}
+		}
+
+		// Count registered redis rooms
+		redisKeys, _ := srv.rdb.Keys(ctx, "nexronda:room:*").Result()
+
+		// LiveKit Cloud standard free / developer tier limits
+		// 100 max concurrent participants, 50 GB monthly bandwidth
+		const cloudMaxParticipants = 100
+		const cloudMaxBandwidthGB = 50.0
+
+		c.JSON(http.StatusOK, gin.H{
+			"livekit": gin.H{
+				"url":                  srv.cfg.LiveKitURL,
+				"active_rooms":         activeRooms,
+				"active_participants":  activeParticipants,
+				"max_participants":     cloudMaxParticipants,
+				"participant_usage_pct": float64(activeParticipants) / float64(cloudMaxParticipants) * 100.0,
+				"max_bandwidth_gb":     cloudMaxBandwidthGB,
+				"plan":                 "LiveKit Cloud Standard",
+				"status":               "healthy",
+			},
+			"convoys": gin.H{
+				"registered_rooms": len(redisKeys),
+				"active_rooms":     liveRoomsList,
+			},
+			"server_time": time.Now().Unix(),
 		})
 	})
 

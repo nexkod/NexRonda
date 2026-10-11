@@ -6,6 +6,7 @@ import '../services/api_service.dart';
 import '../services/intercom_service.dart';
 import 'convoy_room_screen.dart';
 import 'qr_scanner_screen.dart';
+import '../widgets/global_usage_modal.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -220,7 +221,35 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: TextStyle(fontSize: 14, color: Colors.white54),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 12),
+              Center(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () => GlobalUsageModal.show(context),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFF00A8CC).withValues(alpha: 0.4)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.cloud_done, size: 14, color: Colors.greenAccent),
+                        SizedBox(width: 6),
+                        Text(
+                          'LiveKit SFU: Online (View Usage Limits)',
+                          style: TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.w600),
+                        ),
+                        SizedBox(width: 4),
+                        Icon(Icons.chevron_right, size: 14, color: Colors.white38),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
 
               // Active / Resume Convoy Card
               if (_activeSession != null)

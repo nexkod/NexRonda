@@ -10,6 +10,7 @@ import '../models/rider_telemetry.dart';
 import '../services/api_service.dart';
 import '../services/intercom_service.dart';
 import '../utils/map_link_parser.dart';
+import '../widgets/global_usage_modal.dart';
 
 class ConvoyRoomScreen extends StatefulWidget {
   const ConvoyRoomScreen({super.key});
@@ -362,6 +363,11 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
             icon: const Icon(Icons.qr_code_2),
             tooltip: 'Show Convoy QR',
             onPressed: () => _showQrDialog(context, pin),
+          ),
+          IconButton(
+            icon: const Icon(Icons.cloud_outlined, color: Colors.white70),
+            tooltip: 'LiveKit Cloud Usage & Limits',
+            onPressed: () => GlobalUsageModal.show(context),
           ),
           IconButton(
             icon: Icon(_showRadarMap ? Icons.view_list : Icons.map),

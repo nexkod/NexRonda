@@ -92,4 +92,54 @@ class ApiService {
       throw Exception('Failed to end convoy room: ${response.body}');
     }
   }
+
+  static Future<GlobalUsageStats> getUsage() async {
+    final response = await http.get(Uri.parse('$baseUrl/api/usage'));
+    if (response.statusCode == 200) {
+      return GlobalUsageStats.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Failed to fetch usage stats: ${response.body}');
+    }
+  }
+}
+
+class GlobalUsageStats {
+  final String liveKitUrl;
+  final int activeRooms;
+  final int activeParticipants;
+  final int maxParticipants;
+  final double participantUsagePct;
+  final double maxBandwidthGb;
+  final String plan;
+  final String status;
+  final int registeredRooms;
+
+  GlobalUsageStats({
+    required this.liveKitUrl,
+    required this.activeRooms,
+    required this.activeParticipants,
+    required this.maxParticipants,
+    required this.participantUsagePct,
+    required this.maxBandwidthGb,
+    required this.plan,
+    required this.status,
+    required this.registeredRooms,
+  });
+
+  factory GlobalUsageStats.fromJson(Map<String, dynamic> json) {
+    final lk = json['livekit'] as Map<String, dynamic>? ?? {};
+    final convoys = json['convoys'] as Map<String, dynamic>? ?? {};
+
+    return GlobalUsageStats(
+      liveKitUrl: lk['url'] as String? ?? '',
+      activeRooms: (lk['active_rooms'] as num?)?.toInt() ?? 0,
+      activeParticipants: (lk['active_participants'] as num?)?.toInt() ?? 0,
+      maxParticipants: (lk['max_participants'] as num?)?.toInt() ?? 100,
+      participantUsagePct: (lk['participant_usage_pct'] as num?)?.toDouble() ?? 0.0,
+      maxBandwidthGb: (lk['max_bandwidth_gb'] as num?)?.toDouble() ?? 50.0,
+      plan: lk['plan'] as String? ?? 'LiveKit Cloud',
+      status: lk['status'] as String? ?? 'healthy',
+      registeredRooms: (convoys['registered_rooms'] as num?)?.toInt() ?? 0,
+    );
+  }
 }
