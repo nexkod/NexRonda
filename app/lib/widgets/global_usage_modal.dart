@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../services/api_service.dart';
+import '../services/intercom_service.dart';
 
 class GlobalUsageModal extends StatefulWidget {
   const GlobalUsageModal({super.key});
@@ -282,7 +284,7 @@ class _GlobalUsageModalState extends State<GlobalUsageModal> {
                                   children: [
                                     Icon(Icons.speed, color: Colors.greenAccent, size: 16),
                                     SizedBox(width: 6),
-                                    Text('BANDWIDTH', style: TextStyle(fontSize: 10, color: Colors.white54, fontWeight: FontWeight.bold)),
+                                    Text('CLOUD QUOTA', style: TextStyle(fontSize: 10, color: Colors.white54, fontWeight: FontWeight.bold)),
                                   ],
                                 ),
                                 const SizedBox(height: 8),
@@ -290,15 +292,117 @@ class _GlobalUsageModalState extends State<GlobalUsageModal> {
                                   '${stats.maxBandwidthGb.toInt()} GB',
                                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                                 ),
-                                Text(
-                                  'Monthly cloud quota',
-                                  style: const TextStyle(fontSize: 10, color: Colors.white38),
+                                const Text(
+                                  'Monthly SFU quota',
+                                  style: TextStyle(fontSize: 10, color: Colors.white38),
                                 ),
                               ],
                             ),
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Live Rider Cellular Data & Bitrate Counter
+                    Consumer<IntercomService>(
+                      builder: (context, intercom, _) {
+                        final isConnected = intercom.state == IntercomState.connected;
+                        final mbUsed = (intercom.totalSessionBytes / (1024 * 1024));
+                        final bitrate = intercom.currentBitrateKbps;
+
+                        return Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F172A),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isConnected
+                                  ? const Color(0xFF00A8CC).withValues(alpha: 0.5)
+                                  : Colors.white10,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.network_check,
+                                    size: 16,
+                                    color: isConnected ? Colors.cyanAccent : Colors.white38,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  const Text(
+                                    'THIS DEVICE / SESSION DATA',
+                                    style: TextStyle(fontSize: 10, color: Colors.white70, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+                                  ),
+                                  const Spacer(),
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: isConnected ? Colors.greenAccent : Colors.white24,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    isConnected ? 'LIVE' : 'STANDBY',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: isConnected ? Colors.greenAccent : Colors.white38,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        mbUsed < 0.1
+                                            ? '${(intercom.totalSessionBytes / 1024).toStringAsFixed(1)} KB'
+                                            : '${mbUsed.toStringAsFixed(2)} MB',
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      const Text(
+                                        'Cellular data consumed',
+                                        style: TextStyle(fontSize: 10, color: Colors.white38),
+                                      ),
+                                    ],
+                                  ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        '${bitrate.toStringAsFixed(1)} kbps',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: bitrate > 0 ? Colors.greenAccent : Colors.white54,
+                                        ),
+                                      ),
+                                      const Text(
+                                        'Live audio & GPS bitrate',
+                                        style: TextStyle(fontSize: 10, color: Colors.white38),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 12),
 

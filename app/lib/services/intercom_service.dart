@@ -67,6 +67,21 @@ class IntercomService extends ChangeNotifier {
   String? _sosRiderName;
   String? get sosRiderName => _sosRiderName;
 
+  // Bandwidth & Cellular Data Tracking
+  int _totalBytesSent = 0;
+  int _totalBytesReceived = 0;
+  int get totalBytesSent => _totalBytesSent;
+  int get totalBytesReceived => _totalBytesReceived;
+  int get totalSessionBytes => _totalBytesSent + _totalBytesReceived;
+
+  double _currentBitrateKbps = 0.0;
+  double get currentBitrateKbps => _currentBitrateKbps;
+
+  int _bytesSinceLastCheck = 0;
+  Timer? _bitrateTimer;
+  DateTime? _connectedAt;
+  DateTime? get connectedAt => _connectedAt;
+
   Timer? _telemetryTimer;
   StreamSubscription<Position>? _positionSubscription;
   Position? _currentPosition;
@@ -176,6 +191,8 @@ class IntercomService extends ChangeNotifier {
       );
 
       _state = IntercomState.connected;
+      _connectedAt = DateTime.now();
+      _startBitrateMonitoring();
       _updateParticipants();
       _startTelemetryBroadcasting();
       notifyListeners();
@@ -186,6 +203,29 @@ class IntercomService extends ChangeNotifier {
     }
   }
 
+  void _startBitrateMonitoring() {
+    _bitrateTimer?.cancel();
+    _bitrateTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_state == IntercomState.connected) {
+        // Compute audio packet estimate: ~4000 bytes/sec per active speaker (32kbps Opus)
+        int audioBytes = 0;
+        final hasActiveSpeaker = _participants.any((p) => p.isSpeaking);
+        if (hasActiveSpeaker) {
+          audioBytes = 4000;
+        }
+        _bytesSinceLastCheck += audioBytes;
+        _totalBytesReceived += audioBytes;
+
+        // Bitrate in kbps = (bytes in 1 sec * 8) / 1000
+        _currentBitrateKbps = (_bytesSinceLastCheck * 8) / 1000.0;
+        _bytesSinceLastCheck = 0;
+        notifyListeners();
+      } else {
+        _currentBitrateKbps = 0.0;
+      }
+    });
+  }
+
   void _setupListeners() {
     if (_listener == null) return;
 
@@ -193,6 +233,8 @@ class IntercomService extends ChangeNotifier {
       ..on<RoomDisconnectedEvent>((event) {
         _state = IntercomState.disconnected;
         _stopTelemetryBroadcasting();
+        _bitrateTimer?.cancel();
+        _currentBitrateKbps = 0.0;
         notifyListeners();
       })
       ..on<RoomReconnectingEvent>((event) {
@@ -220,6 +262,10 @@ class IntercomService extends ChangeNotifier {
 
   void _handleDataReceived(DataReceivedEvent event) {
     try {
+      final byteCount = event.data.length;
+      _totalBytesReceived += byteCount;
+      _bytesSinceLastCheck += byteCount;
+
       final raw = utf8.decode(event.data);
       final telemetry = RiderTelemetry.deserialize(raw);
       if (telemetry != null) {
@@ -289,6 +335,8 @@ class IntercomService extends ChangeNotifier {
     final bytes = utf8.encode(telemetry.serialize());
     try {
       await _room!.localParticipant?.publishData(bytes);
+      _totalBytesSent += bytes.length;
+      _bytesSinceLastCheck += bytes.length;
     } catch (_) {}
     notifyListeners();
   }
