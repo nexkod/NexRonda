@@ -62,15 +62,14 @@ class _AssistiveFloatingOverlayState extends State<AssistiveFloatingOverlay> {
       // Compact Bubble Mode (Draggable Circle, pulsing when talking)
       return Material(
         color: Colors.transparent,
-        child: Center(
+        child: Align(
+          alignment: Alignment.center,
           child: GestureDetector(
-            onTap: () async {
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
               setState(() => _isExpanded = true);
-              // Resize window to expanded bar (px)
-              await FlutterOverlayWindow.resizeOverlay(750, 280, true);
             },
             onLongPressStart: (_) {
-              // Quick Push-to-Talk on long hold
               setState(() => _isPttActive = true);
               _sendAction('ptt_down');
             },
@@ -134,60 +133,73 @@ class _AssistiveFloatingOverlayState extends State<AssistiveFloatingOverlay> {
     // Expanded Mini Control Bar Mode
     return Material(
       color: Colors.transparent,
-      child: Center(
-        child: Container(
-          width: 270,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E293B).withValues(alpha: 0.95),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFF00A8CC), width: 1.5),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.5),
-                blurRadius: 12,
-                spreadRadius: 3,
-              ),
-            ],
+      child: Stack(
+        children: [
+          // Invisible dismissable backdrop: tap outside collapses back to bubble!
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () {
+                setState(() => _isExpanded = false);
+              },
+            ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header title + minimize button
-              Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _activeSpeaker.isNotEmpty ? Colors.greenAccent : const Color(0xFF00A8CC),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      _activeSpeaker.isNotEmpty
-                          ? 'Speaking: $_activeSpeaker'
-                          : _roomName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () async {
-                      setState(() => _isExpanded = false);
-                      await FlutterOverlayWindow.resizeOverlay(180, 180, true);
-                    },
-                    child: const Icon(Icons.close, color: Colors.white54, size: 16),
+          Center(
+            child: Container(
+              width: 280,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E293B).withValues(alpha: 0.96),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFF00A8CC), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    blurRadius: 16,
+                    spreadRadius: 4,
                   ),
                 ],
               ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header title + collapse button
+                  Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _activeSpeaker.isNotEmpty ? Colors.greenAccent : const Color(0xFF00A8CC),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _activeSpeaker.isNotEmpty
+                              ? 'Speaking: $_activeSpeaker'
+                              : _roomName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          setState(() => _isExpanded = false);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          child: const Icon(Icons.close, color: Colors.white70, size: 18),
+                        ),
+                      ),
+                    ],
+                  ),
               const SizedBox(height: 8),
 
               // Action buttons row (Mute, Hold PTT, Return to App)
@@ -266,6 +278,8 @@ class _AssistiveFloatingOverlayState extends State<AssistiveFloatingOverlay> {
           ),
         ),
       ),
-    );
+    ],
+  ),
+);
   }
 }

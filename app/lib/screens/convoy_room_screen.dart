@@ -160,8 +160,8 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> with WidgetsBinding
           flag: OverlayFlag.defaultFlag,
           visibility: NotificationVisibility.visibilityPublic,
           positionGravity: PositionGravity.auto,
-          height: 160,
-          width: 160,
+          height: 300,
+          width: 750,
         );
       }
 
