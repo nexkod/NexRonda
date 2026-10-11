@@ -171,6 +171,9 @@ class IntercomService extends ChangeNotifier {
         roomOptions: const RoomOptions(
           adaptiveStream: true,
           dynacast: true,
+          defaultAudioCaptureOptions: AudioCaptureOptions(
+            stopAudioCaptureOnMute: false,
+          ),
           defaultAudioPublishOptions: AudioPublishOptions(
             name: 'rider-audio',
             dtx: true,
@@ -181,13 +184,13 @@ class IntercomService extends ChangeNotifier {
       _listener = _room!.createListener();
       _setupListeners();
 
+      final initialMic = _micMode == MicMode.vad && !_isMuted;
       await _room!.connect(
         session.liveKitUrl,
         session.token,
-      );
-
-      await _room!.localParticipant?.setMicrophoneEnabled(
-        _micMode == MicMode.vad ? true : false,
+        fastConnectOptions: FastConnectOptions(
+          microphone: TrackOption(enabled: initialMic),
+        ),
       );
 
       _state = IntercomState.connected;
@@ -360,9 +363,16 @@ class IntercomService extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool _isTogglingMic = false;
   Future<void> _setMicEnabled(bool enabled) async {
-    if (_room?.localParticipant != null) {
+    if (_room?.localParticipant == null || _isTogglingMic) return;
+    _isTogglingMic = true;
+    try {
       await _room!.localParticipant!.setMicrophoneEnabled(enabled);
+    } catch (e) {
+      debugPrint('[IntercomService] Error setting microphone enabled: $e');
+    } finally {
+      _isTogglingMic = false;
     }
   }
 

@@ -146,7 +146,7 @@ class _AssistiveFloatingOverlayState extends State<AssistiveFloatingOverlay> {
           ),
           Center(
             child: Container(
-              width: 280,
+              width: 270,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: const Color(0xFF1E293B).withValues(alpha: 0.96),
@@ -154,9 +154,9 @@ class _AssistiveFloatingOverlayState extends State<AssistiveFloatingOverlay> {
                 border: Border.all(color: const Color(0xFF00A8CC), width: 1.5),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.6),
-                    blurRadius: 16,
-                    spreadRadius: 4,
+                    color: Colors.black.withValues(alpha: 0.45),
+                    blurRadius: 12,
+                    spreadRadius: 1,
                   ),
                 ],
               ),

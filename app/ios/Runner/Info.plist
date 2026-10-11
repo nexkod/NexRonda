@@ -59,6 +59,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>NexRonda uses your camera to scan convoy ride QR codes for instant 1-second room joining.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>

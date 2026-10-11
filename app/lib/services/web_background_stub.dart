@@ -1,4 +1,4 @@
-abstract class WebBackgroundService {
+class WebBackgroundServiceImpl {
   static void enable(String roomName) {
     throw UnimplementedError();
   }

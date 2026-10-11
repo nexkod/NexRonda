@@ -16,6 +16,7 @@ class NexEdarRelease {
   final String changelog;
   final bool isMandatory;
   final String createdAt;
+  final String? directDownloadUrl;
 
   NexEdarRelease({
     required this.id,
@@ -27,25 +28,34 @@ class NexEdarRelease {
     required this.changelog,
     required this.isMandatory,
     required this.createdAt,
+    this.directDownloadUrl,
   });
 
   factory NexEdarRelease.fromJson(Map<String, dynamic> json) {
     return NexEdarRelease(
-      id: (json['id'] as num).toInt(),
+      id: (json['id'] as num?)?.toInt() ?? 0,
       projectId: json['project_id'] as String? ?? 'nexronda',
       versionName: json['version_name'] as String? ?? '1.0.0',
       versionCode: (json['version_code'] as num?)?.toInt() ?? 1,
-      fileSizeBytes: (json['file_size_bytes'] as num?)?.toInt() ?? 0,
+      fileSizeBytes: (json['file_size_bytes'] as num?)?.toInt() ?? (json['file_size'] as num?)?.toInt() ?? 0,
       sha256: json['sha256'] as String? ?? '',
       changelog: json['changelog'] as String? ?? '',
       isMandatory: json['is_mandatory'] as bool? ?? false,
-      createdAt: json['created_at'] as String? ?? '',
+      createdAt: json['created_at'] as String? ?? json['published_at'] as String? ?? '',
+      directDownloadUrl: json['download_url'] as String?,
     );
   }
 
-  String get downloadUrl => id > 0
-      ? 'https://edar.nexkod.com/p/$projectId/download/$id'
-      : 'https://edar.nexkod.com/p/$projectId/download/latest';
+  String get downloadUrl {
+    if (directDownloadUrl != null && directDownloadUrl!.isNotEmpty) {
+      return directDownloadUrl!;
+    }
+    if (id > 0) {
+      return 'https://edar.nexkod.com/p/$projectId/download/$id';
+    }
+    return 'https://edar.nexkod.com/p/$projectId';
+  }
+
   String get portalUrl => 'https://edar.nexkod.com/p/$projectId';
 
   String get fileSizeFormatted {
@@ -81,18 +91,7 @@ class UpdateService {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         if (data.containsKey('version_code')) {
-          // Flatten into NexEdarRelease
-          return NexEdarRelease(
-            id: (data['id'] as num?)?.toInt() ?? 0,
-            projectId: data['project_id'] as String? ?? projectId,
-            versionName: data['version_name'] as String? ?? '1.0.0',
-            versionCode: (data['version_code'] as num?)?.toInt() ?? 1,
-            fileSizeBytes: (data['file_size'] as num?)?.toInt() ?? 0,
-            sha256: data['sha256'] as String? ?? '',
-            changelog: data['changelog'] as String? ?? '',
-            isMandatory: data['is_mandatory'] as bool? ?? false,
-            createdAt: data['published_at'] as String? ?? '',
-          );
+          return NexEdarRelease.fromJson(data);
         }
       }
 

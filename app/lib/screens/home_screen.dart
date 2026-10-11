@@ -8,7 +8,6 @@ import '../services/api_service.dart';
 import '../services/intercom_service.dart';
 import 'convoy_room_screen.dart';
 import 'qr_scanner_screen.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../widgets/global_usage_modal.dart';
 import '../services/update_service.dart';
 

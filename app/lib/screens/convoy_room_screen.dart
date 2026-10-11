@@ -11,6 +11,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
+import 'package:live_activities/live_activities.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/web_background_service.dart';
 import '../models/rider_telemetry.dart';
@@ -34,6 +35,9 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> with WidgetsBinding
   bool _isOverlayActive = false;
   StreamSubscription? _overlaySub;
 
+  final LiveActivities _liveActivities = LiveActivities();
+  String? _latestActivityId;
+
   @override
   void initState() {
     super.initState();
@@ -52,67 +56,150 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> with WidgetsBinding
       });
     }
 
-    // On Android, auto-prompt/prepare floating overlay
+    // On Android, prepare floating overlay listeners
     if (!kIsWeb && Platform.isAndroid) {
       _initOverlayListener();
-      // Auto-show overlay if permission was already granted previously
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        final isGranted = await FlutterOverlayWindow.isPermissionGranted();
-        if (isGranted && !_isOverlayActive) {
-          _showFloatingOverlayInternal();
-        }
-      });
+    }
+
+    // On iOS, initialize Live Activities
+    if (!kIsWeb && Platform.isIOS) {
+      _initIosLiveActivity();
+    }
+  }
+
+  Future<void> _initIosLiveActivity() async {
+    try {
+      final bool areEnabled = await _liveActivities.areActivitiesEnabled();
+      debugPrint('[ConvoyRoomScreen] areActivitiesEnabled: $areEnabled');
+
+      await _liveActivities.init(appGroupId: 'group.com.nexkod.nexronda');
+      if (!mounted) return;
+      final intercom = context.read<IntercomService>();
+      final roomName = intercom.session?.roomName ?? 'Convoy Ride';
+      final activityId = 'convoy_${intercom.session?.roomPin ?? 'ride'}';
+
+      _latestActivityId = await _liveActivities.createActivity(
+        activityId,
+        {
+          'roomName': roomName,
+          'activeSpeaker': '',
+          'isSpeaking': false,
+          'isMuted': intercom.isMuted,
+          'isSos': intercom.isSosActive,
+        },
+        removeWhenAppIsKilled: true,
+        iOSEnableRemoteUpdates: false,
+      );
+      debugPrint('[ConvoyRoomScreen] Created iOS Live Activity with ID: $_latestActivityId');
+    } catch (e) {
+      debugPrint('[ConvoyRoomScreen] Error creating iOS Live Activity: $e');
+    }
+  }
+
+  void _syncIosLiveActivity() {
+    if (kIsWeb || !Platform.isIOS || _latestActivityId == null) return;
+    try {
+      final intercom = context.read<IntercomService>();
+      final roomName = intercom.session?.roomName ?? 'Convoy Ride';
+      final activeSpeaker = intercom.participants
+              .where((p) => p.isSpeaking)
+              .map((p) => p.name.isNotEmpty ? p.name : p.identity)
+              .firstOrNull ??
+          '';
+
+      _liveActivities.updateActivity(
+        _latestActivityId!,
+        {
+          'roomName': roomName,
+          'activeSpeaker': activeSpeaker,
+          'isSpeaking': activeSpeaker.isNotEmpty,
+          'isMuted': intercom.isMuted,
+          'isSos': intercom.isSosActive,
+        },
+      );
+    } catch (e) {
+      debugPrint('[ConvoyRoomScreen] Error updating iOS Live Activity: $e');
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (kIsWeb || !Platform.isAndroid) return;
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-      // App is sent to background, ensure overlay is active if permission granted
-      if (!_isOverlayActive) {
-        FlutterOverlayWindow.isPermissionGranted().then((granted) {
-          if (granted) _showFloatingOverlayInternal();
-        });
+    if (kIsWeb) return;
+
+    if (Platform.isAndroid) {
+      if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+        // App sent to background -> Auto-show floating bubble
+        _autoShowFloatingOverlay();
+      } else if (state == AppLifecycleState.resumed) {
+        // App returned to foreground -> Auto-hide floating bubble
+        _autoHideFloatingOverlay();
+      }
+    } else if (Platform.isIOS) {
+      if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+        _syncIosLiveActivity();
       }
     }
   }
 
+  static StreamSubscription? _staticOverlaySub;
+
   void _initOverlayListener() {
-    _overlaySub = FlutterOverlayWindow.overlayListener.listen((event) {
-      if (!mounted || event == null) return;
-      try {
-        final data = event is String ? jsonDecode(event) : event;
-        if (data is Map) {
-          final action = data['action'] as String?;
-          final intercom = context.read<IntercomService>();
-          if (action == 'toggle_mute') {
-            intercom.toggleMute();
-          } else if (action == 'ptt_down') {
-            intercom.pttDown();
-          } else if (action == 'ptt_up') {
-            intercom.pttUp();
-          } else if (action == 'open_app') {
-            // Overlay asks to focus app (Android will bring activity to front)
+    if (_staticOverlaySub != null) return;
+    try {
+      _staticOverlaySub = FlutterOverlayWindow.overlayListener.listen((event) {
+        if (!mounted || event == null) return;
+        try {
+          final data = event is String ? jsonDecode(event) : event;
+          if (data is Map) {
+            final action = data['action'] as String?;
+            final intercom = context.read<IntercomService>();
+            if (action == 'toggle_mute') {
+              intercom.toggleMute();
+            } else if (action == 'ptt_down') {
+              intercom.pttDown();
+            } else if (action == 'ptt_up') {
+              intercom.pttUp();
+            } else if (action == 'open_app') {
+              // Overlay asks to focus app (Android will bring activity to front)
+            }
           }
-        }
-      } catch (_) {}
-    });
+        } catch (_) {}
+      });
+    } catch (e) {
+      debugPrint('[ConvoyRoomScreen] overlayListener error: $e');
+    }
+  }
+
+  
+
+  Future<void> _autoShowFloatingOverlay() async {
+    try {
+      final bool isGranted = await FlutterOverlayWindow.isPermissionGranted();
+      if (!isGranted) return;
+
+      final bool isAlreadyOpen = await FlutterOverlayWindow.isActive();
+      if (!isAlreadyOpen) {
+        await _showFloatingOverlayInternal();
+      }
+    } catch (e) {
+      debugPrint('[ConvoyRoomScreen] Error auto-showing overlay: $e');
+    }
+  }
+
+  Future<void> _autoHideFloatingOverlay() async {
+    try {
+      final bool isAlreadyOpen = await FlutterOverlayWindow.isActive();
+      if (isAlreadyOpen) {
+        await FlutterOverlayWindow.closeOverlay();
+        if (mounted) setState(() => _isOverlayActive = false);
+      }
+    } catch (e) {
+      debugPrint('[ConvoyRoomScreen] Error auto-hiding overlay: $e');
+    }
   }
 
   Future<void> _toggleFloatingOverlay() async {
     if (kIsWeb || !Platform.isAndroid) return;
-
-    if (_isOverlayActive) {
-      await FlutterOverlayWindow.closeOverlay();
-      setState(() => _isOverlayActive = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Floating Assistive Bubble closed')),
-        );
-      }
-      return;
-    }
 
     // Check permission
     final bool isGranted = await FlutterOverlayWindow.isPermissionGranted();
@@ -131,12 +218,23 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> with WidgetsBinding
       }
     }
 
+    if (_isOverlayActive) {
+      await FlutterOverlayWindow.closeOverlay();
+      setState(() => _isOverlayActive = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Floating Assistive Bubble hidden')),
+        );
+      }
+      return;
+    }
+
     await _showFloatingOverlayInternal();
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Floating Assistive Bubble active! App can now be minimized while navigating.'),
+          content: Text('Floating Bubble active! It will auto-appear over Google Maps / Waze when minimized.'),
           backgroundColor: Color(0xFF10B981),
         ),
       );
@@ -160,8 +258,8 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> with WidgetsBinding
           flag: OverlayFlag.defaultFlag,
           visibility: NotificationVisibility.visibilityPublic,
           positionGravity: PositionGravity.auto,
-          height: 300,
-          width: 750,
+          height: 340,
+          width: 840,
         );
       }
 
@@ -181,9 +279,14 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> with WidgetsBinding
   @override
   void dispose() {
     _overlaySub?.cancel();
-    if (!kIsWeb && Platform.isAndroid && _isOverlayActive) {
+    if (!kIsWeb && Platform.isAndroid) {
       try {
         FlutterOverlayWindow.closeOverlay();
+      } catch (_) {}
+    }
+    if (!kIsWeb && Platform.isIOS && _latestActivityId != null) {
+      try {
+        _liveActivities.endActivity(_latestActivityId!);
       } catch (_) {}
     }
     try {
