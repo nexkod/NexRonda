@@ -2,7 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'services/intercom_service.dart';
 import 'screens/home_screen.dart';
-export 'widgets/assistive_floating_overlay.dart' show overlayMain;
+import 'widgets/assistive_floating_overlay.dart';
+
+@pragma("vm:entry-point")
+void overlayMain() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(
+    const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: AssistiveFloatingOverlay(),
+    ),
+  );
+}
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();

@@ -26,7 +26,7 @@ class ConvoyRoomScreen extends StatefulWidget {
   State<ConvoyRoomScreen> createState() => _ConvoyRoomScreenState();
 }
 
-class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
+class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> with WidgetsBindingObserver {
   final MapController _mapController = MapController();
   bool _showRadarMap = true;
   bool _hasFittedInitialBounds = false;
@@ -37,6 +37,7 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Keep screen awake while inside convoy room (Crucial for handlebar mount / web)
     try {
       WakelockPlus.enable();
@@ -51,9 +52,29 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
       });
     }
 
-    // On Android, listen for floating overlay actions (PTT, Mute, Open App)
+    // On Android, auto-prompt/prepare floating overlay
     if (!kIsWeb && Platform.isAndroid) {
       _initOverlayListener();
+      // Auto-show overlay if permission was already granted previously
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final isGranted = await FlutterOverlayWindow.isPermissionGranted();
+        if (isGranted && !_isOverlayActive) {
+          _showFloatingOverlayInternal();
+        }
+      });
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (kIsWeb || !Platform.isAndroid) return;
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      // App is sent to background, ensure overlay is active if permission granted
+      if (!_isOverlayActive) {
+        FlutterOverlayWindow.isPermissionGranted().then((granted) {
+          if (granted) _showFloatingOverlayInternal();
+        });
+      }
     }
   }
 
@@ -110,29 +131,7 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
       }
     }
 
-    final intercom = context.read<IntercomService>();
-    final roomName = intercom.session?.roomName ?? 'NexRonda Convoy';
-
-    await FlutterOverlayWindow.showOverlay(
-      enableDrag: true,
-      overlayTitle: 'NexRonda Assistive Bubble',
-      overlayContent: 'Active Intercom Over Navigation',
-      flag: OverlayFlag.defaultFlag,
-      visibility: NotificationVisibility.visibilityPublic,
-      positionGravity: PositionGravity.auto,
-      height: 70,
-      width: 70,
-    );
-
-    setState(() => _isOverlayActive = true);
-
-    // Sync initial state
-    FlutterOverlayWindow.shareData(jsonEncode({
-      'roomName': roomName,
-      'isMuted': intercom.isMuted,
-      'activeSpeaker': intercom.participants.where((p) => p.isSpeaking).map((p) => p.name.isNotEmpty ? p.name : p.identity).firstOrNull ?? '',
-      'isSos': intercom.isSosActive,
-    }));
+    await _showFloatingOverlayInternal();
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -141,6 +140,41 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
           backgroundColor: Color(0xFF10B981),
         ),
       );
+    }
+  }
+
+  Future<void> _showFloatingOverlayInternal() async {
+    try {
+      final intercom = context.read<IntercomService>();
+      final roomName = intercom.session?.roomName ?? 'NexRonda Convoy';
+
+      final bool isGranted = await FlutterOverlayWindow.isPermissionGranted();
+      if (!isGranted) return;
+
+      final bool isAlreadyOpen = await FlutterOverlayWindow.isActive();
+      if (!isAlreadyOpen) {
+        await FlutterOverlayWindow.showOverlay(
+          enableDrag: true,
+          overlayTitle: 'NexRonda Convoy Intercom',
+          overlayContent: 'Active voice & telemetry over maps',
+          flag: OverlayFlag.defaultFlag,
+          visibility: NotificationVisibility.visibilityPublic,
+          positionGravity: PositionGravity.auto,
+          height: 160,
+          width: 160,
+        );
+      }
+
+      if (mounted) setState(() => _isOverlayActive = true);
+
+      FlutterOverlayWindow.shareData(jsonEncode({
+        'roomName': roomName,
+        'isMuted': intercom.isMuted,
+        'activeSpeaker': intercom.participants.where((p) => p.isSpeaking).map((p) => p.name.isNotEmpty ? p.name : p.identity).firstOrNull ?? '',
+        'isSos': intercom.isSosActive,
+      }));
+    } catch (e) {
+      debugPrint('[ConvoyRoomScreen] Error launching floating overlay: $e');
     }
   }
 
@@ -158,6 +192,7 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
     if (kIsWeb) {
       WebBackgroundService.disable();
     }
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
