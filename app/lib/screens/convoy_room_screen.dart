@@ -25,10 +25,21 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
   bool _hasFittedInitialBounds = false;
 
   void _fitAllRidersAndDestination(IntercomService intercom) {
+    // If we're not showing the radar map, switch to it first
+    if (!_showRadarMap) {
+      setState(() => _showRadarMap = true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _fitAllRidersAndDestination(intercom);
+      });
+      return;
+    }
+
     final points = <LatLng>[];
 
     // Local position
-    if (intercom.currentPosition != null) {
+    if (intercom.currentPosition != null &&
+        intercom.currentPosition!.latitude != 0.0 &&
+        intercom.currentPosition!.longitude != 0.0) {
       points.add(LatLng(intercom.currentPosition!.latitude, intercom.currentPosition!.longitude));
     }
 
@@ -48,20 +59,42 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
 
     if (points.isEmpty) return;
 
-    if (points.length == 1) {
-      _mapController.move(points.first, 15.0);
-      return;
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      try {
+        if (points.length == 1) {
+          _mapController.move(points.first, 15.0);
+          return;
+        }
 
-    try {
-      final bounds = LatLngBounds.fromPoints(points);
-      _mapController.fitCamera(
-        CameraFit.bounds(
-          bounds: bounds,
-          padding: const EdgeInsets.all(50),
-        ),
-      );
-    } catch (_) {}
+        // Check if all points are practically identical
+        final first = points.first;
+        final allSame = points.every(
+          (p) => (p.latitude - first.latitude).abs() < 0.0001 &&
+                 (p.longitude - first.longitude).abs() < 0.0001,
+        );
+
+        if (allSame) {
+          _mapController.move(first, 15.0);
+          return;
+        }
+
+        final bounds = LatLngBounds.fromPoints(points);
+        _mapController.fitCamera(
+          CameraFit.bounds(
+            bounds: bounds,
+            padding: const EdgeInsets.all(50),
+          ),
+        );
+      } catch (e) {
+        debugPrint('[ConvoyRoomScreen] fitAllRiders error: $e');
+        if (points.isNotEmpty) {
+          try {
+            _mapController.move(points.first, 14.0);
+          } catch (_) {}
+        }
+      }
+    });
   }
 
   void _focusOnRider(double lat, double lng) {
