@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'services/intercom_service.dart';
 import 'screens/home_screen.dart';
+export 'widgets/assistive_floating_overlay.dart' show overlayMain;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();

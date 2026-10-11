@@ -6,7 +6,11 @@ import 'package:livekit_client/livekit_client.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/web_background_service.dart';
 import '../models/rider_telemetry.dart';
@@ -27,6 +31,9 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
   bool _showRadarMap = true;
   bool _hasFittedInitialBounds = false;
 
+  bool _isOverlayActive = false;
+  StreamSubscription? _overlaySub;
+
   @override
   void initState() {
     super.initState();
@@ -43,10 +50,108 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
         WebBackgroundService.enable(roomName);
       });
     }
+
+    // On Android, listen for floating overlay actions (PTT, Mute, Open App)
+    if (!kIsWeb && Platform.isAndroid) {
+      _initOverlayListener();
+    }
+  }
+
+  void _initOverlayListener() {
+    _overlaySub = FlutterOverlayWindow.overlayListener.listen((event) {
+      if (!mounted || event == null) return;
+      try {
+        final data = event is String ? jsonDecode(event) : event;
+        if (data is Map) {
+          final action = data['action'] as String?;
+          final intercom = context.read<IntercomService>();
+          if (action == 'toggle_mute') {
+            intercom.toggleMute();
+          } else if (action == 'ptt_down') {
+            intercom.pttDown();
+          } else if (action == 'ptt_up') {
+            intercom.pttUp();
+          } else if (action == 'open_app') {
+            // Overlay asks to focus app (Android will bring activity to front)
+          }
+        }
+      } catch (_) {}
+    });
+  }
+
+  Future<void> _toggleFloatingOverlay() async {
+    if (kIsWeb || !Platform.isAndroid) return;
+
+    if (_isOverlayActive) {
+      await FlutterOverlayWindow.closeOverlay();
+      setState(() => _isOverlayActive = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Floating Assistive Bubble closed')),
+        );
+      }
+      return;
+    }
+
+    // Check permission
+    final bool isGranted = await FlutterOverlayWindow.isPermissionGranted();
+    if (!isGranted) {
+      final bool? granted = await FlutterOverlayWindow.requestPermission();
+      if (granted != true) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please allow "Display over other apps" permission in Settings.'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    final intercom = context.read<IntercomService>();
+    final roomName = intercom.session?.roomName ?? 'NexRonda Convoy';
+
+    await FlutterOverlayWindow.showOverlay(
+      enableDrag: true,
+      overlayTitle: 'NexRonda Assistive Bubble',
+      overlayContent: 'Active Intercom Over Navigation',
+      flag: OverlayFlag.defaultFlag,
+      visibility: NotificationVisibility.visibilityPublic,
+      positionGravity: PositionGravity.auto,
+      height: 70,
+      width: 70,
+    );
+
+    setState(() => _isOverlayActive = true);
+
+    // Sync initial state
+    FlutterOverlayWindow.shareData(jsonEncode({
+      'roomName': roomName,
+      'isMuted': intercom.isMuted,
+      'activeSpeaker': intercom.participants.where((p) => p.isSpeaking).map((p) => p.name.isNotEmpty ? p.name : p.identity).firstOrNull ?? '',
+      'isSos': intercom.isSosActive,
+    }));
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Floating Assistive Bubble active! App can now be minimized while navigating.'),
+          backgroundColor: Color(0xFF10B981),
+        ),
+      );
+    }
   }
 
   @override
   void dispose() {
+    _overlaySub?.cancel();
+    if (!kIsWeb && Platform.isAndroid && _isOverlayActive) {
+      try {
+        FlutterOverlayWindow.closeOverlay();
+      } catch (_) {}
+    }
     try {
       WakelockPlus.disable();
     } catch (_) {}
@@ -493,9 +598,29 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> {
                 GlobalUsageModal.show(context);
               } else if (val == 'fit_map') {
                 _fitAllRidersAndDestination(intercom);
+              } else if (val == 'overlay') {
+                _toggleFloatingOverlay();
               }
             },
             itemBuilder: (ctx) => [
+              if (!kIsWeb && Platform.isAndroid)
+                PopupMenuItem(
+                  value: 'overlay',
+                  child: Row(
+                    children: [
+                      Icon(
+                        _isOverlayActive ? Icons.cancel_presentation : Icons.picture_in_picture_alt,
+                        color: _isOverlayActive ? Colors.amberAccent : const Color(0xFF10B981),
+                        size: 18,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        _isOverlayActive ? 'Close Floating Bubble' : 'Floating Bubble (Assistive)',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
               const PopupMenuItem(
                 value: 'destination',
                 child: Row(
