@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class NexEdarRelease {
@@ -52,10 +53,8 @@ class NexEdarRelease {
   }
 }
 
-class UpdateService {
-  static const int currentVersionCode = 2; // Matches pubspec.yaml versionCode
-  static const String currentVersionName = '1.0.0';
 
+class UpdateService {
   /// Fetches the latest published release on NexEdar
   static Future<NexEdarRelease?> checkLatestRelease({String projectId = 'nexronda'}) async {
     try {
@@ -76,9 +75,16 @@ class UpdateService {
 
   /// Checks if an update is available compared to the currently running version
   static Future<NexEdarRelease?> checkForUpdate() async {
-    final latest = await checkLatestRelease();
-    if (latest != null && latest.versionCode > currentVersionCode) {
-      return latest;
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final currentCode = int.tryParse(packageInfo.buildNumber) ?? 1;
+
+      final latest = await checkLatestRelease();
+      if (latest != null && latest.versionCode > currentCode) {
+        return latest;
+      }
+    } catch (e) {
+      debugPrint('[UpdateService] Error checking update: $e');
     }
     return null;
   }
