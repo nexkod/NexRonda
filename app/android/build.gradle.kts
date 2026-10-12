@@ -16,6 +16,13 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 subprojects {
+    project.plugins.whenPluginAdded {
+        if (this is com.android.build.gradle.LibraryPlugin) {
+            project.apply(mapOf("plugin" to "org.jetbrains.kotlin.android"))
+        }
+    }
+}
+subprojects {
     project.evaluationDependsOn(":app")
 }
 

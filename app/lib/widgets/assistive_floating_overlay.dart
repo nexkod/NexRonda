@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 
 /// Entry point executed inside the floating overlay Android window
@@ -257,18 +258,27 @@ class _AssistiveFloatingOverlayState extends State<AssistiveFloatingOverlay> {
                     ),
                   ),
 
-                  // Return to NexRonda app
+                  // Return to NexRonda app (Maximize)
                   GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: () {
+                      try {
+                        const MethodChannel('com.nexkod.nexronda/navigation')
+                            .invokeMethod('bringToFront')
+                            .catchError((_) => null);
+                      } catch (_) {}
                       _sendAction('open_app');
                     },
-                    child: const CircleAvatar(
-                      radius: 17,
-                      backgroundColor: Color(0xFF0F172A),
-                      child: Icon(
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF0F172A),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
                         Icons.open_in_full,
-                        color: Colors.white70,
-                        size: 16,
+                        color: Colors.white,
+                        size: 18,
                       ),
                     ),
                   ),

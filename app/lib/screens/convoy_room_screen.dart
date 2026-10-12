@@ -141,23 +141,18 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> with WidgetsBinding
     }
   }
 
+  static StreamSubscription? _globalOverlaySub;
+
   void _initOverlayListener() {
-    _overlaySub?.cancel();
+    if (_globalOverlaySub != null) return;
     try {
-      _overlaySub = FlutterOverlayWindow.overlayListener.listen((event) {
-        if (!mounted || event == null) return;
+      _globalOverlaySub = FlutterOverlayWindow.overlayListener.listen((event) {
+        if (event == null) return;
         try {
           final data = event is String ? jsonDecode(event) : event;
           if (data is Map) {
             final action = data['action'] as String?;
-            final intercom = context.read<IntercomService>();
-            if (action == 'toggle_mute') {
-              intercom.toggleMute();
-            } else if (action == 'ptt_down') {
-              intercom.pttDown();
-            } else if (action == 'ptt_up') {
-              intercom.pttUp();
-            } else if (action == 'open_app') {
+            if (action == 'open_app') {
               // Overlay asks to focus app (Bring Android activity to front)
               const MethodChannel('com.nexkod.nexronda/navigation')
                   .invokeMethod('bringToFront')
@@ -165,6 +160,15 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> with WidgetsBinding
                 debugPrint('[ConvoyRoomScreen] bringToFront error: $e');
                 return null;
               });
+            } else if (mounted) {
+              final intercom = context.read<IntercomService>();
+              if (action == 'toggle_mute') {
+                intercom.toggleMute();
+              } else if (action == 'ptt_down') {
+                intercom.pttDown();
+              } else if (action == 'ptt_up') {
+                intercom.pttUp();
+              }
             }
           }
         } catch (e) {
@@ -268,6 +272,12 @@ class _ConvoyRoomScreenState extends State<ConvoyRoomScreen> with WidgetsBinding
           width: 840,
         );
       }
+
+      // Notify native Android to link navigation MethodChannel to the overlay engine
+      try {
+        await const MethodChannel('com.nexkod.nexronda/navigation')
+            .invokeMethod('registerOverlayEngine');
+      } catch (_) {}
 
       if (mounted) setState(() => _isOverlayActive = true);
 
